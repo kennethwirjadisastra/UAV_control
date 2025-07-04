@@ -53,7 +53,52 @@ def forces_with_controls(t, state, params):
     Fx = Tmax * throttle
     Ft = np.array([Fx, 0, 0])
 
-    return Fg + Ft
+    
+    # Airspeed magnitude
+    V = np.linalg.norm([u, v, w]) + 1e-6 # divide by zero error
+
+    # Angle of attack
+    alpha = np.arctan2(w, u)
+
+    # Aerodynamic parameters
+    rho = params.get("rho", 1.225)  # air density at sea level kg/m^3
+    S = params.get("S", 16.2)       # wing area in m^2
+
+    # Lift and drag coefficients (simple linear model)
+    CL0 = params.get("CL0", 0.2)          # lift coef at alpha=0
+    CLalpha = params.get("CLalpha", 5.5)  # per radian increase in alpha
+    CD0 = params.get("CD0", 0.02)         # drag at at L=0
+    k = params.get("k", 0.07)             # drag factor
+    
+    CL = CL0 + CLalpha * alpha            # compute lift coefficient
+    CD = CD0 + k * CL**2                  # compute drag coefficient
+    
+    # Lift and Drag magnitudes
+    qbar = 0.5 * rho * V**2               
+    L = qbar * S * CL
+    D = qbar * S * CD
+    
+    # Lift direction approx: perpendicular to velocity in body-x/w plane (positive z direction)
+    # Drag direction: opposite velocity vector
+    
+    # Normalize wind vector
+    v_hat = np.array([u, v, w]) / V
+    
+    # Drag vector (opposes velocity)
+    F_drag = -D * v_hat
+    
+    # Lift vector (approximate lift perpendicular to velocity and lateral axis)
+    # For simplicity, approximate lift direction as perpendicular to velocity in x-z plane:
+    lift_dir = np.array([-np.sin(alpha), 0.0, np.cos(alpha)])  # perpendicular in x-z plane
+    F_lift = L * lift_dir
+    
+    # Total aerodynamic force
+    F_aero = F_lift + F_drag
+    
+    # Total force in body frame
+    F_total = Fg + Ft + F_aero
+    
+    return F_total
 
 def moments_with_controls(t, state, params):
     # Map control surface deflections to moments (simple linear model)
