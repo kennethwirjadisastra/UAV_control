@@ -1,4 +1,4 @@
-from fixedWing12ODES import *              # keep if you need it later
+from planeODES import *              # keep if you need it later
 import numpy as np
 import pyvista as pv                       # pip install pyvista
 

@@ -19,26 +19,23 @@ state0[11] = -1000.0  # z_d (down is positive)
 
 t, y = simulate(state0, t_final=10.0, dt=0.01, params=params)
 
-print(y.shape)
+trajX = y[:, 9]
+trajY = y[:, 10]
+trajZ = -y[:, 11]
 
+points = np.column_stack((trajX, trajY, trajZ))
 
+# Define line connectivity (each point connects to the next)
+lines = np.hstack(([len(points)], np.arange(len(points))))
 
+# Create PolyData for the trajectory
+trajectory = pv.PolyData()
+trajectory.points = points
+trajectory.lines = lines
 
-
-
-# points = np.column_stack((x, y, z))
-
-# # Define line connectivity (each point connects to the next)
-# lines = np.hstack(([len(points)], np.arange(len(points))))
-
-# # Create PolyData for the trajectory
-# trajectory = pv.PolyData()
-# trajectory.points = points
-# trajectory.lines = lines
-
-# # Plot
-# plotter = pv.Plotter()
-# plotter.add_mesh(trajectory, color="navy", line_width=2, label="Plane Trajectory")
-# plotter.add_axes()
-# plotter.add_legend()
-# plotter.show()
+# Plot
+plotter = pv.Plotter()
+plotter.add_mesh(trajectory, color="navy", line_width=2, label="Plane Trajectory")
+plotter.add_axes()
+plotter.add_legend()
+plotter.show()
