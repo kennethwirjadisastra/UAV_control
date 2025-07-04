@@ -1,13 +1,19 @@
-from fixedWing12ODES import *
+from fixedWing12ODES import *              # keep if you need it later
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import pyvista as pv                       # pip install pyvista
 
+# ----- data -------------------------------------------------------------
+x = np.linspace(0, 3, 100)
+y = np.linspace(0, 3, 100)
+xx, yy = np.meshgrid(x, y)
+zz = np.sin(xx**2 + yy**2)
 
-XX, YY = np.meshgrid(np.linspace(0, 3, 100), np.linspace(0, 3, 100))
-ZZ = np.sin(XX*XX + YY*YY)
+# PyVista wants a StructuredGrid for a regular surface
+grid = pv.StructuredGrid(xx, yy, zz)
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(XX, YY, ZZ, cmap='viridis')
-plt.show()
+# ----- plot -------------------------------------------------------------
+plotter = pv.Plotter()
+plotter.add_mesh(grid, cmap="viridis", smooth_shading=True)
+plotter.add_axes()                         # interactive triad
+plotter.set_background("white")            # optional
+plotter.show()                             # Z‑axis stays upright
