@@ -101,16 +101,38 @@ def forces_with_controls(t, state, params):
     return F_total
 
 def moments_with_controls(t, state, params):
-    # Map control surface deflections to moments (simple linear model)
-    delta_e = params.get("delta_e", 0.0)  # Elevator
-    delta_a = params.get("delta_a", 0.0)  # Aileron
-    delta_r = params.get("delta_r", 0.0)  # Rudder
+    u, v, w, p, q, r, *_ = state
+    V = np.linalg.norm([u, v, w]) + 1e-6  # prevent div by zero
 
-    Me = 1000.0 * delta_e  # Pitch moment
-    Ma = 800.0  * delta_a  # Roll moment
-    Mr = 500.0  * delta_r  # Yaw moment
+    rho = params.get("rho", 1.225)
+    S = params.get("S", 16.2)
+    b = params.get("b", 10.9)
+    c = params.get("c", 1.5)
 
-    return np.array([Ma, Me, Mr])
+
+    # Control deflections
+    delta_e = params.get("delta_e", 0.0)  # Elevator (pitch)
+    delta_a = params.get("delta_a", 0.0)  # Aileron (roll)
+    delta_r = params.get("delta_r", 0.0)  # Rudder  (yaw)
+
+    # Aerodynamic coefficients
+    Cm_delta_e = params.get("C_m_delta_e", -1.0)
+    Cl_delta_a = params.get("C_l_delta_a",  0.08)
+    Cn_delta_r = params.get("C_n_delta_r", -0.06)
+
+    Cm_q = params.get("C_m_q", -12.0)
+    Cl_p = params.get("C_l_p", -0.5)
+    Cn_r = params.get("C_n_r", -0.3)
+
+    # Compute aerodynamic moments
+    qbar = 0.5 * rho * V**2 
+    L = qbar * S * b * (Cl_delta_a * delta_a + Cl_p * p * b / (2 * V))
+    M = qbar * S * c * (Cm_delta_e * delta_e + Cm_q * q * c / (2 * V))
+    N = qbar * S * b * (Cn_delta_r * delta_r + Cn_r * r * b / (2 * V))
+
+    return np.array([L, M, N])
+
+
 
 def aircraft_eom(t, state, forces_func, moments_func, params):
     """Return time derivative of 12-state vector for a rigid aircraft."""
