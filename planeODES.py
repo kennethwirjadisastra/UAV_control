@@ -1,5 +1,5 @@
 """
-aircraft_12dof_sim.py
+planeODES.py
 Simple 12-state rigid-body aircraft dynamics demo.
 
 States (index):
@@ -60,26 +60,34 @@ def forces_with_controls(t, state, params):
     # Angle of attack
     alpha = np.arctan2(w, u)
 
+    # Side slip angle
+    beta = np.arcsin(v/V)
+
     # Aerodynamic parameters
     rho = params.get("rho", 1.225)  # air density at sea level kg/m^3
     S = params.get("S", 16.2)       # wing area in m^2
 
     # Lift and drag coefficients (simple linear model)
-    CL0 = params.get("CL0", 0.2)          # lift coef at alpha=0
-    CLalpha = params.get("CLalpha", 5.5)  # per radian increase in alpha
-    CD0 = params.get("CD0", 0.02)         # drag at at L=0
-    k = params.get("k", 0.07)             # drag factor
+    CL0 = params.get("CL0", 0.2)            # lift coef at alpha=0
+    CLalpha = params.get("CLalpha", 5.5)    # per radian increase in alpha
+    CD0 = params.get("CD0", 0.02)           # drag at at L=0
+    k = params.get("k", 0.07)               # drag factor
+    CY0 = params.get("CY0", 0.0)            # sideslip coefficient at beta = 0
+    CYbeta = params.get("CYbeta", -0.98)    # change in coefficient per radian increase of beta
     
     CL = CL0 + CLalpha * alpha            # compute lift coefficient
     CD = CD0 + k * CL**2                  # compute drag coefficient
+    CY = CY0 + CYbeta * beta              # compute sideslip coefficient
     
-    # Lift and Drag magnitudes
+    # Lift, Drag, and Sideslip magnitudes
     qbar = 0.5 * rho * V**2               
     L = qbar * S * CL
     D = qbar * S * CD
+    Y = qbar * S * CY
     
     # Lift direction approx: perpendicular to velocity in body-x/w plane (positive z direction)
     # Drag direction: opposite velocity vector
+    # Sideslip direction: purely along y direction (0 x and z components)
     
     # Normalize wind vector
     v_hat = np.array([u, v, w]) / V
@@ -91,9 +99,12 @@ def forces_with_controls(t, state, params):
     # For simplicity, approximate lift direction as perpendicular to velocity in x-z plane:
     lift_dir = np.array([-np.sin(alpha), 0.0, np.cos(alpha)])  # perpendicular in x-z plane
     F_lift = L * lift_dir
+
+    # Sideslip purely in y
+    F_side = np.array([0, Y, 0])
     
     # Total aerodynamic force
-    F_aero = F_lift + F_drag
+    F_aero = F_lift + F_side + F_drag
     
     # Total force in body frame
     F_total = Fg + Ft + F_aero
@@ -222,7 +233,9 @@ if __name__ == "__main__":
 
     # Initial state (rest, level, 1000 m altitude)
     state0 = np.zeros(12)
+    state0[0:3] = np.random.randn(3)
     state0[11] = -1000.0  # z_d (down is positive)
+    print(f'Initial State:\n{state0.reshape(-1,3)}\n')
 
     t, y = simulate(state0, t_final=10.0, dt=0.01, params=params)
 
