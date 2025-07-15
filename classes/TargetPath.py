@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # creates targets for the path to converge to
 # waypoints includes the starting location of the vehicle
 class TargetPath:
-    # initialized with a list of waypoints (atleast 1 for the vehicles current location and one for the final target)
+    # initialized with a list of waypoints (at least 1 for the vehicles current location and one for the final target)
     def __init__(self, waypoints: np.array):
         assert waypoints.ndim == 2
         self.waypoints = waypoints
@@ -26,21 +26,21 @@ class TargetPath:
         residual_ts = t - self.normalized_cumulative_lengths[indices]
         return self.waypoints[indices] + residual_ts[:,None] * self.scaled_segment_vectors[indices]
 
-    
+if __name__ == '__main__':
+    s = np.linspace(0, 2, 33)
+    x = s
+    y = np.e**(s-1)
+    waypoints = np.stack([x, y], axis=1)
 
-s = np.linspace(0, 2, 33)
-x = np.cos(3*s)
-y = np.sin(s)
-waypoints = np.stack([x, y], axis=1)
+    N = 10
+    t = np.linspace(0, 1, N+1)
 
-N = 10
-t = np.linspace(0, 1, N+1)
+    targetPath = TargetPath(waypoints)
+    trajectoryTargets = targetPath.normalized_interpolate(t)
 
-targetPath = TargetPath(waypoints)
-trajectoryTargets = targetPath.normalized_interpolate(t)
-
-plt.scatter(*targetPath.waypoints.T, label='Waypoints')
-plt.plot(*targetPath.waypoints.T, ls='--', label='Linear Path')
-plt.scatter(*trajectoryTargets.T, marker='*', label='Step Targets', zorder=2, s=200)
-plt.legend()
-plt.show()
+    plt.scatter(*targetPath.waypoints.T, label='Waypoints')
+    plt.plot(*targetPath.waypoints.T, ls='--', label='Linear Path')
+    plt.scatter(*trajectoryTargets.T, marker='*', label='Step Targets', zorder=2, s=200)
+    plt.legend()
+    plt.axis('equal')
+    plt.show()
