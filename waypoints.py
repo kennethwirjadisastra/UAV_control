@@ -1,73 +1,46 @@
-import torch
+import numpy as np
 import matplotlib.pyplot as plt
 
-class WaypointPath:
-    def __init__(self, t, waypoints):
-        self.n_steps = len(t) - 1
-        self.t = t
-        self.m_waypoints = len(waypoints)
+# Function that interpolates between the waypoints (M,d) normalized by length
+# creates targets for the path to converge to
+# waypoints includes the starting location of the vehicle
+class TargetPath:
+    # initialized with a list of waypoints (atleast 1 for the vehicles current location and one for the final target)
+    def __init__(self, waypoints: np.array):
+        assert waypoints.ndim == 2
+        self.waypoints = waypoints
+        self.M = waypoints.shape[0]
 
-        self.waypoints = waypoints.type(torch.float32)              # (M,2)
-        self.segs = self.waypoints[1:,:] - self.waypoints[:-1,:]    # (M-1,2)
+        # precompute the cumulative lengths and scaled segment vectors
+        segments = waypoints[1:,:] - waypoints[:-1,:]
+        lengths = np.linalg.norm(segments, axis=-1)
+        total_length = np.sum(lengths)
+        norm_lenghts = lengths / total_length
+        self.normalized_cumulative_lengths = np.concat([[0], np.cumsum(norm_lenghts)])
+        self.scaled_segment_vectors = (segments / lengths[:,None]) * total_length
 
-        self.seg_lens = torch.norm(self.segs, dim=1)  # length of each linear segment
-        self.total_len = torch.sum(self.seg_lens)     # length of all linear segments combined
-        
-        self.cum_lens = torch.cat([torch.tensor([0], device=waypoints.device),
-                                   torch.cumsum(self.seg_lens, dim=0)],
-                                   dim=0) # cumulative length of path at each waypoint
-        
-    def normalize(self):
-        self.norm_cum_lens = self.cum_lens / self.total_len # normalized cumulative length at each waypoint
-        self.norm_seg_lens = self.norm_cum_lens[1:] - self.norm_cum_lens[:-1] # length of each segment in the distance normalized path
-        
+    def normalized_interpolate(self, t: np.array) -> np.array:
+        indices = np.searchsorted(self.normalized_cumulative_lengths, t, side='right') - 1
+        indices = np.clip(indices, 0, self.M - 2)
 
-    def normalize(self):
-        self.norm_cum_lens = self.cum_lens / self.total_len # normalized cumulative length at each waypoint
-        self.norm_seg_lens = self.norm_cum_lens[1:] - self.norm_cum_lens[:-1] # length of each segment in the distance normalized path
-        
-
-    def step_targets(self):
-        # normalize path length by distance
-        self.normalize()
-
-        step_idx = torch.searchsorted(self.norm_cum_lens[1:], self.t, right=True) # segment index that each step falls after
-        step_idx = torch.clamp(step_idx, 0, self.m_waypoints - 2)
-
-        # Start end end segments of each step's cumulative normalized distance
-        seg_start = self.waypoints[step_idx]
-        seg_end = self.waypoints[step_idx + 1]
-
-        norm_seg_start = self.norm_cum_lens[step_idx] # starting normalized distance of each step's segment
-        norm_seg_len = self.norm_seg_lens[step_idx] # segment length of each step's segment
-
-        # distance from normalized cumulative segment start to normalized cumulative step
-        step_lens = ((self.t - norm_seg_start) / norm_seg_len).reshape(-1,1)
-
-        # compute target position of each step
-        step_targets = seg_start + step_lens*(seg_end - seg_start)
-        
-        return step_targets
+        residual_ts = t - self.normalized_cumulative_lengths[indices]
+        return self.waypoints[indices] + residual_ts[:,None] * self.scaled_segment_vectors[indices]
 
     
 
+s = np.linspace(0, 2, 33)
+x = np.cos(3*s)
+y = np.sin(s)
+waypoints = np.stack([x, y], axis=1)
 
-x = torch.linspace(0,2*torch.pi,50)
-sinx = torch.sin(x)
-waypoints = torch.stack([x, sinx], dim=1)
+N = 10
+t = np.linspace(0, 1, N+1)
 
+targetPath = TargetPath(waypoints)
+trajectoryTargets = targetPath.normalized_interpolate(t)
 
-n_steps = 10
-# N steps ==> N+1 waypoints
-t = torch.linspace(0, 1, n_steps+1) # step lengths along normalized path
-
-path = WaypointPath(t, waypoints)
-path.normalize()
-path_steps = path.step_targets()
-
-
-plt.scatter(*path.waypoints.T, label='Waypoints')
-plt.plot(*path.waypoints.T, ls='--', label='Linear Path')
-plt.scatter(*path_steps.T, marker='*', label='Step Targets', zorder=2, s=200)
+plt.scatter(*targetPath.waypoints.T, label='Waypoints')
+plt.plot(*targetPath.waypoints.T, ls='--', label='Linear Path')
+plt.scatter(*trajectoryTargets.T, marker='*', label='Step Targets', zorder=2, s=200)
 plt.legend()
 plt.show()
