@@ -17,13 +17,11 @@ params = {
     "CLalpha":  5.5,
     "CD0":      0.02,
     "k":        0.07
-
-
 }
 
 # Initial state (rest, level, 1000 m altitude)
 state0 = np.zeros(12)
-state0[0] = 100
+state0[0] = 5
 state0[11] = -1000.0  # z_d (down is positive)
 
 t, y = simulate(state0, t_final=30.0, dt=0.01, params=params)

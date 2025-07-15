@@ -38,7 +38,7 @@ def gravity_force_body(mass, phi, theta, psi, g=9.81):
         [cphi*sth*cpsi + sphi*spsi, cphi*sth*spsi - sphi*cpsi, cphi*cth]
     ])
 
-    return -R_i2b @ g_ned  # negative because gravity pulls down
+    return R_i2b @ g_ned
 
 def forces_with_controls(t, state, params):
     u, v, w, p, q, r, phi, theta, psi, *_ = state
