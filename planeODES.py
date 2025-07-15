@@ -12,8 +12,8 @@ States (index):
  6 phi   roll angle (rad)
  7 theta pitch angle (rad)
  8 psi   yaw  angle (rad)
- 9 x_e   inertial east position (m)
-10 y_n   inertial north position (m)
+ 9 x_n   inertial north position (m)
+10 y_e   inertial east position (m)
 11 z_d   inertial down position (m)
 
 The script integrates the equations of motion with a fixed-step RK4 solver.
@@ -147,7 +147,7 @@ def moments_with_controls(t, state, params):
 
 def aircraft_eom(t, state, forces_func, moments_func, params):
     """Return time derivative of 12-state vector for a rigid aircraft."""
-    u, v, w, p, q, r, phi, theta, psi, x_e, y_n, z_d = state
+    u, v, w, p, q, r, phi, theta, psi, x_n, y_e, z_d = state
     m      = params["mass"]
     Ix, Iy, Iz = params["I"]
 
@@ -185,13 +185,13 @@ def aircraft_eom(t, state, forces_func, moments_func, params):
     ])
 
     vel_body = np.array([u, v, w])
-    dx_e, dy_n, dz_d = R_b2i @ vel_body
+    dx_n, dy_e, dz_d = R_b2i @ vel_body
 
     return np.array([
         du, dv, dw,
         dp, dq, dr,
         dphi, dtheta, dpsi,
-        dx_e, dy_n, dz_d
+        dx_n, dy_e, dz_d
     ])
 
 def rk4_step(fun, t, y, dt, *args):
