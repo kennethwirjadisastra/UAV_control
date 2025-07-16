@@ -28,7 +28,7 @@ class Vehicle:
         # system characteristics
         self.mass               = np.array(mass if mass else [1])
         self.inertia            = np.array(inertia if inertia else np.eye(3))
-        self.inv_inertia        = np.linalg.inv(inertia)
+        self.inv_inertia        = np.linalg.inv(self.inertia)
 
 
     @property
@@ -64,30 +64,6 @@ class Vehicle:
         next_state = [s + dt/6 * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]) for i, s in enumerate(state)]
         next_state[2] /= np.linalg.norm(next_state[2])
         return next_state
-
-    def forward(self, dt: float | np.ndarray, n_steps: int = 64):
-        n_steps = len(dt) if not np.isscalar(dt) else n_steps
-        time = dt*np.ones(n_steps) if np.isscalar(dt) else np.cumsum(dt)
-
-        if np.isscalar(dt):
-            time = np.linspace(0.0, n_steps*dt, num=n_steps+1, endpoint=True)
-        else:
-            n_steps = len(dt)
-            time = np.concatenate([[0.0], np.cumsum(dt)])
-
-        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
-        trajectory = np.zeros((n_steps+1, 14))
-        
-        trajectory[0] = np.concatenate([self.get_state().copy(), [time]])
-
-        for i in range(n_steps):
-            # update state
-            self.set_steate(self.rk4_step(dt[i]))
-            time += dt[i]
-
-            trajectory[i+1] = np.concatenate([self.get_state.copy(), [time]])
-        
-        return trajectory
 
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
