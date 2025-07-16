@@ -26,6 +26,7 @@ class TargetPath:
         residual_ts = t - self.normalized_cumulative_lengths[indices]
         return self.waypoints[indices] + residual_ts[:,None] * self.scaled_segment_vectors[indices]
 
+
 if __name__ == '__main__':
     s = np.linspace(0, 2, 33)
     x = s
