@@ -61,6 +61,30 @@ class Vehicle:
 
         self.position, self.velocity, self.quaternion, self.angular_velocity = new_state
 
+    def forward(self, dt: float | np.ndarray, n_steps: int = 64):
+        n_steps = len(dt) if not np.isscalar(dt) else n_steps
+        time = dt*np.ones(n_steps) if np.isscalar(dt) else np.cumsum(dt)
+
+        if np.isscalar(dt):
+            time = np.linspace(0.0, n_steps*dt, num=n_steps+1, endpoint=True)
+        else:
+            n_steps = len(dt)
+            time = np.concatenate([[0.0], np.cumsum(dt)])
+
+        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
+        trajectory = np.zeros((n_steps+1, 14))
+        
+        trajectory[0] = np.concatenate([self.get_state().copy(), [time]])
+
+        for i in range(n_steps):
+            # update state
+            self.set_steate(self.rk4_step(dt[i]))
+            time += dt[i]
+
+            trajectory[i+1] = np.concatenate([self.get_state.copy(), [time]])
+        
+        return trajectory
+
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
                 f"quaternion={self.quaternion}, angular_velocity={self.angular_velocity})")
