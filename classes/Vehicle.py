@@ -21,14 +21,14 @@ class Vehicle:
             mass: np.ndarray = None, inertia: np.ndarray = None):
         
         # state of the system
-        self.position           = np.array(position if position else [0.0, 0.0, 0.0])
-        self.velocity           = np.array(velocity if velocity else [0.0, 0.0, 0.0])
-        self.quaternion         = np.array(quaternion if quaternion else [0.0, 0.0, 0.0, 1.0])
-        self.angular_velocity   = np.array(angular_velocity if angular_velocity else [0.0, 0.0, 0.0])
+        self.position           = np.array([0.0, 0.0, 0.0] if position is None else position)
+        self.velocity           = np.array([0.0, 0.0, 0.0] if velocity is None else velocity)
+        self.quaternion         = np.array([0.0, 0.0, 0.0, 1.0] if quaternion is None else quaternion)
+        self.angular_velocity   = np.array([0.0, 0.0, 0.0] if angular_velocity is None else angular_velocity)
 
         # system characteristics
-        self.mass               = np.array(mass if mass else [1])
-        self.inertia            = np.array(inertia if inertia else np.eye(3))
+        self.mass               = np.array([1] if mass is None else mass)
+        self.inertia            = np.array(np.eye(3) if inertia is None else inertia)
         self.inv_inertia        = np.linalg.inv(self.inertia)
 
 
@@ -41,14 +41,6 @@ class Vehicle:
     
     def set_state(self, state):
         self.position, self.velocity, self.quaternion, self.angular_velocity = state
-
-    def state_13D(self):
-        state = np.zeros(13)
-        state[0:3] = self.position
-        state[3:6] = self.velocity
-        state[6:10] = self.quaternion
-        state[10:] = self.angular_velocity
-        return state
     
     # computes the dynamics of the system given the current state, net force and net moment
     def dynamics(self, state, force, moment):
@@ -79,11 +71,11 @@ class Vehicle:
                 force=None, moment=None, n_steps: int = 64):
 
         if np.isscalar(dt):
-            time = np.linspace(0.0, n_steps*dt, num=n_steps+1, endpoint=True) # (n_steps+1,)
+            t = np.linspace(0.0, n_steps*dt, num=n_steps+1, endpoint=True) # (n_steps+1,)
             dt = dt*np.ones(n_steps)
         else:
             n_steps = len(dt)
-            time = np.concatenate([[0.0], np.cumsum(dt)]) # (n_steps+1,)
+            t = np.hstack([[0.0], np.cumsum(dt)]) # (n_steps+1,)
         
         force = np.zeros((n_steps, 3)) if force is None else np.asarray(force)
         moment = np.zeros((n_steps, 3)) if moment is None else np.asarray(moment)
@@ -96,35 +88,66 @@ class Vehicle:
         assert force.shape == (n_steps, 3), "force must be (n_steps, 3)"
         assert moment.shape == (n_steps, 3), "moment must be (n_steps, 3)"
 
-        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity ==> 13 dimensional state
-        path = np.zeros((n_steps+1, 13))
+        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity
+        p = np.zeros((n_steps+1, 3))
+        v = np.zeros((n_steps+1, 3))
+        q = np.zeros((n_steps+1, 4))
+        w = np.zeros((n_steps+1, 3))
         
-        path[0] = self.state_13D()
+        p[0], v[0], q[0], w[0] = self.get_state()
 
         for i in range(n_steps):
             # update state
             self.set_state(self.rk4_step(self.get_state(), force[i], moment[i], dt[i]))
-            path[i+1] = self.state_13D()
-        
-        trajectory = np.hstack([path, time[:,None]]) # (n_steps, 14) includes time
+            p[i+1], v[i+1], q[i+1], w[i+1] = self.get_state()
 
-        return trajectory
+        return p, v, q, w, t
 
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
                 f"quaternion={self.quaternion}, angular_velocity={self.angular_velocity})")
+    
+
 if __name__ == '__main__':
-    UAV = Vehicle()
+    position = np.array([0.0,0.0,1000.0])
+    velocity = np.array([100.0, 200.0, 0.0])
+    quaternion = [0.0, 0.0, 0.0, 1.0]
+    angular_velocity = [0.0, 0.0, 0.0]
+    mass = 1
+    inertia = np.eye(3)
+
     dt = 0.01
     n_steps = 1000
-    force = np.array([0, 0, 9.81]) * UAV.mass # oppose gravity (should hover in space)
 
-    trajectory = UAV.forward(dt, force=force, n_steps=n_steps)
+    force = np.zeros((n_steps, 3))
+    x = np.linspace(-np.pi,np.pi,n_steps)
+    force[:,0] = 50*np.cos(x)
+    force[:,1] = np.exp(x)
+    force[:,2] = 9.81*mass*np.ones(n_steps) # oppose gravity (should remain at constant height)
 
-    plt.plot(trajectory[:,-1], trajectory[:,2], label='Aircraft Height (m)')
-    plt.title('Aircraft Height')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Height (m)')
-    plt.legend()
-    plt.grid()
+    UAV = Vehicle(position=position, velocity=velocity, quaternion=quaternion, angular_velocity=angular_velocity,
+                  mass=mass, inertia=inertia)
+
+    p, v, q, w, t = UAV.forward(dt, force=force, n_steps=n_steps)
+    
+    fig = plt.figure(figsize=(16,6))
+    ax1 = fig.add_subplot(1, 2, 1, projection=None)
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+
+    ax1.plot(t, p[:,2], label='Aircraft Height (m)')
+    ax1.set_title('Aircraft Height')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Height (m)')
+    ax1.legend()
+    ax1.grid()
+
+    ax2.plot(*p.T, label='Aircraft Trajectory')
+    ax2.scatter(*p[0,:], label='Initial Position')
+    ax2.scatter(*p[-1,:], label='Final Position')
+    ax2.set_title('Aircraft Trajectory')
+    ax2.set_xlabel('X Position')
+    ax2.set_ylabel('Y Position')
+    ax2.set_zlabel('Z Position')
+    ax2.grid()
+    ax2.legend()
     plt.show()
