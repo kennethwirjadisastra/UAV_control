@@ -20,14 +20,14 @@ class Trajectory:
         N = len(actions)
         moments = np.zeros((N, 3)) if moments is None else moments
 
-        assert len(actions) == len(moments) == len(dt) - 1
+        assert len(actions) == len(moments) == len(dt)
 
         # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
         p = np.zeros((N+1, 3))
         v = np.zeros((N+1, 3))
         q = np.zeros((N+1, 4))
         w = np.zeros((N+1, 3))
-        t = np.cumsum(dt, axis=0)
+        t = np.hstack([[0], np.cumsum(dt, axis=0)])
 
         p[0], v[0], q[0], w[0] = vehicle.get_state()
 
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     inertia = np.eye(3)
 
     N = 1000
-    dt = 0.01*np.ones(N+1)
+    dt = 0.01*np.ones(N)
 
     actions = np.zeros((N, 3))
     x = np.linspace(-np.pi,np.pi,N)
@@ -85,3 +85,5 @@ if __name__ == '__main__':
     ax2.grid()
     ax2.legend()
     plt.show()
+
+    print(t)
