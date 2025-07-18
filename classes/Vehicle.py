@@ -77,6 +77,8 @@ class Vehicle(ABC):
     def compute_forces_and_moments(self, state, action) -> tuple[np.array, np.array]:
         pass
 
+    def simulate_trajectory(self, initial_state, action_plan, dt):
+        traj = 
 
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
