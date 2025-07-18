@@ -111,7 +111,10 @@ class Car(Vehicle):
 
         # throttle forces
 
-        tire_throttle_forces        = None
+        # Assumes rear wheel drive (RWD), force applied only to back wheels
+        throttle_tire_force_mag     = throttle*self.wheel_torque*np.array([1.0, 1.0, 0.0, 0.0])  # (4,3)
+        
+        tire_throttle_forces        = throttle_tire_force_mag * tire_directions     # (4,3)
 
         # group the forces and compute the moments
         forces                      = np.concatenate([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity])
