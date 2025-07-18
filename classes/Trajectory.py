@@ -13,17 +13,16 @@ class Trajectory:
         self.vehicle = vehicle
 
 
-    def forward(self, actions: np.ndarray, dt: np.ndarray, moments: np.ndarray=None,
+    def forward(self, actions: np.ndarray, moments: np.ndarray, dt: np.ndarray,
                 update_state=True, return_all=False):
         '''
         Takes vehicle and propagates its state forward in time given
         actions, moments, and dt using rk4 integration scheme
         '''
         vehicle = self.vehicle
-        N = len(actions)
-        moments = np.zeros((N, 3)) if moments is None else moments
 
         assert len(actions) == len(moments) == len(dt), "actions, moments, and dt must have same length"
+        N = len(actions)
 
         # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
         p = np.zeros((N+1, 3))
@@ -48,7 +47,7 @@ class Trajectory:
         # returns (N+1, 14) if return_all is true, otherwise p, v, q, w, t separately
         if return_all:
             return np.hstack([p,v,q,w,t[:,None]])
-        return p,v,q,w,t
+        return np.array([p,v,q,w,t], dtype=object)
 
 ###################################
 ## ---------- testing ---------- ##
@@ -69,13 +68,14 @@ if __name__ == '__main__':
     actions[:,0] = 50*np.cos(x)
     actions[:,1] = np.exp(x)
     actions[:,2] = 9.81*mass*np.ones(N) # oppose gravity (should remain at constant height)
+    moments = np.random.randn(N,3)
 
     UAV = DummyVehicle(position=position, velocity=velocity, quaternion=quaternion, 
                        angular_velocity=angular_velocity, mass=mass, inertia=inertia)
     UAV_traj = Trajectory(UAV)
 
     print(f'State Before forward(): {np.hstack(UAV.get_state())}\n')
-    traj = UAV_traj.forward(actions=actions, dt=dt, update_state=False, return_all=True) # return full state as (N,14) tensor
+    traj = UAV_traj.forward(actions=actions, dt=dt, moments=moments, update_state=False, return_all=True) # return full state as (N,14) tensor
     # position, veloctiy, quaternions, angular velocity, time
     p = traj[:,0:3]
     v = traj[:,3:6]
