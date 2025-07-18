@@ -49,21 +49,43 @@ class Car(Vehicle):
                                             [1.44, -0.81, -0.55], 
                                             [1.44, 0.81, -0.55]
                                         ])
+        
+        self.wheel_attach_positions    = np.array([                     # location where wheels are attached by the suspension to the body
+                                            [-1.44, -0.81, 0], 
+                                            [-1.44, 0.81, 0], 
+                                            [1.44, -0.81, 0], 
+                                            [1.44, 0.81, 0]
+                                        ])
 
-        self.max_steering_speed     = 0.5                               # radians per second at the front wheels
+        self.max_steering_speed         = 0.5                           # radians per second at the front wheels
 
     def compute_forces_and_moments(self, state, action) -> tuple[np.ndarray, np.ndarray]:
         pos, vel, quat, ang_vel = state
         rot_mat = R.from_quat(quat).as_matrix()
 
-        suspension_axis         = rot_mat @ np.array([0, 0, 1])
-        wheel_world_positions   = pos + self.wheel_positions
+        # suspension forces
+        suspension_axis             = rot_mat @ np.array([0, 0, -1])
+        wheel_world_positions       = pos + (rot_mat @ self.wheel_resting_positions.T).T
+        wheel_suspension_heights    = wheel_world_positions[:, 2] / (suspension_axis[2] + 1e-6)
 
+        ang_vel_mat                 = np.array([
+                                        [0, -ang_vel[2], ang_vel[1]],
+                                        [ang_vel[2], 0, -ang_vel[0]],
+                                        [-ang_vel[1], ang_vel[0], 0]
+                                    ])
+        wheel_suspension_speeds     = (vel[2] + (ang_vel_mat @ self.wheel_resting_positions.T)[2,:]) / (suspension_axis[2] + 1e-6)
 
+        suspension_forces           = suspension_force(wheel_suspension_heights, wheel_suspension_speeds) * suspension_axis
+        force_of_gravity            = np.array([0, 0, -9.81 * self.mass])
 
+        # tire forces
 
+        # throttle forces
 
         throttle, steer = np.clip(action, [0.0, 1.0], [-1.0, 1.0])
 
+        forces                      = np.concatenate([suspension_forces, force_of_gravity])
+        force_locations             = np.concatenate([rot_mat @ self.wheel_attach_positions, [0, 0, 0]])
+        moments                     = np.cross([force_locations, forces])
 
-        return force, moment
+        return np.sum(forces, axis=0), np.sum(moments, axis=0)
