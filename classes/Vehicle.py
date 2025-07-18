@@ -78,7 +78,7 @@ class Vehicle(ABC):
         pass
 
     def simulate_trajectory(self, initial_state, action_plan, dt):
-        traj = 
+        pass
 
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
