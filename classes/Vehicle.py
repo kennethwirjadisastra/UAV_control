@@ -34,8 +34,8 @@ class Vehicle(ABC):
 
 
     @property
-    def rotation(self):
-        return R.from_quat(self.quaternion)
+    def rotation_matrix(self):
+        return R.from_quat(self.quaternion).as_matrix()
     
 
     def get_state(self):
@@ -56,7 +56,7 @@ class Vehicle(ABC):
         return np.array([dpdt, dvdt, dqdt, wdot], dtype=object)
     
 
-    # computes the future state of the system after 1 step of rung-kutta 4 integration
+    # computes the future state of the system after 1 step of rung-kutta 4th order integration
     def rk4_step(self, state, force, moment, dt):
         def euler_step(state, dynamics, dt):
             return [x + dxdt*dt for x, dxdt in zip(state, dynamics)]
