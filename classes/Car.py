@@ -61,7 +61,7 @@ class Car(Vehicle):
                                             [1.44, 0.81, -0.55]
                                         ])
         
-        self.suspension_attach_positions    = np.array([                     # location where wheels are attached by the suspension to the body
+        self.suspension_attach_pos      = np.array([                     # location where wheels are attached by the suspension to the body
                                             [-1.44, -0.81, 0], 
                                             [-1.44, 0.81, 0], 
                                             [1.44, -0.81, 0], 
@@ -116,7 +116,7 @@ class Car(Vehicle):
 
         # group the forces and compute the moments
         forces                      = np.concatenate([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity])
-        force_locations             = np.concatenate([rot_mat @ self.suspension_attach_positions, rot_mat @ wheel_body_positions, [0, 0, 0]])
+        force_locations             = np.concatenate([rot_mat @ self.suspension_attach_pos, rot_mat @ wheel_body_positions, [0, 0, 0]])
         moments                     = np.cross([force_locations, forces])
 
         return np.sum(forces, axis=0), np.sum(moments, axis=0)
