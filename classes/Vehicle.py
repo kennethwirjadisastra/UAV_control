@@ -56,6 +56,43 @@ class Vehicle(ABC):
         return np.array([dpdt, dvdt, dqdt, wdot], dtype=object)
     
 
+    def forward(self, actions: np.ndarray, dt: np.ndarray,
+                update_state=True, return_all=False):
+        '''
+        Takes vehicle and propagates its state forward in time given
+        actions, moments, and dt using rk4 integration scheme
+        '''
+        vehicle = self.vehicle
+
+        assert len(actions) == len(dt), "actions and dt must have same length"
+        N = len(actions)
+        forces, moments = self.compute_forces_and_moments(self.get_state(), actions)
+
+        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
+        p = np.zeros((N+1, 3))
+        v = np.zeros((N+1, 3))
+        q = np.zeros((N+1, 4))
+        w = np.zeros((N+1, 3))
+        t = np.hstack([[0], np.cumsum(dt, axis=0)])
+
+        # initial state
+        state = vehicle.get_state()
+        p[0], v[0], q[0], w[0] = state
+
+        for i in range(N):
+            # propagate state
+            state = vehicle.rk4_step(state, forces[i], moments[i], dt[i])
+            p[i+1], v[i+1], q[i+1], w[i+1] = state
+            
+            # update state
+            if update_state:
+                vehicle.set_state(state)
+
+        # returns (N+1, 14) if return_all is true, otherwise p, v, q, w, t separately
+        if return_all:
+            return np.hstack([p,v,q,w,t[:,None]])
+        return np.array([p,v,q,w,t], dtype=object)
+    
     # computes the future state of the system after 1 step of rung-kutta 4th order integration
     def rk4_step(self, state, force, moment, dt):
         def euler_step(state, dynamics, dt):
