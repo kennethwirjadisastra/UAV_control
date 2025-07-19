@@ -100,33 +100,35 @@ class Car(Vehicle):
 
         wheel_suspension_speeds     = (vel[2] + (rot_mat @ (ang_vel_mat @ self.wheel_resting_positions.T))[2,:]) / (suspension_axis[2] + 1e-6)
 
-        suspension_forces           = suspension_force(wheel_suspension_heights, wheel_suspension_speeds) * suspension_axis
-        force_of_gravity            = np.array([0, 0, -9.81 * self.mass])
+        suspension_mags             = suspension_force(wheel_suspension_heights, wheel_suspension_speeds)
+        suspension_forces           = suspension_mags[:,None] * suspension_axis[None,:]
 
         # tire forces
         steer_angle                 = steer * self.max_steering_angle
         coss, sins                  = np.cos(steer_angle), np.sin(steer_angle)
-        tire_directions             = rot_mat @ np.array([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]])
-        wheel_body_positions        = self.wheel_resting_positions + wheel_suspension_heights * np.array([0, 0, -1])
-        tire_velocities             = vel + rot_mat @ (ang_vel_mat @ wheel_body_positions)
+        tire_directions             = (rot_mat @ np.array([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]]).T).T
+        wheel_body_positions        = self.wheel_resting_positions + wheel_suspension_heights[:,None] * np.array([0, 0, -1])[None,:]
+        tire_velocities             = vel + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T)).T
 
         up_dir                      = rot_mat @ np.array([0, 0, 1])
         tire_proj_vels              = project_and_normalize(tire_velocities, up_dir)
         tire_proj_dirs              = project_and_normalize(tire_directions, up_dir)
         slip_angles                 = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)
-        tire_normal_forces          = suspension_forces * suspension_axis[2]
-        tire_perp_dirs              = rot_mat @ np.array([[0, 1, 0], [0, 1, 0], [-sins, coss, 0], [-sins, coss, 0]])
-        tire_lateral_forces         = tire_normal_forces * pacejka_lateral_force(slip_angles) * tire_perp_dirs
+        tire_normal_forces          = suspension_mags * suspension_axis[2]
+        tire_perp_dirs              = (rot_mat @ np.array([[0, 1, 0], [0, 1, 0], [-sins, coss, 0], [-sins, coss, 0]]).T).T
+        tire_lateral_forces         = (tire_normal_forces * pacejka_lateral_force(slip_angles))[:,None] * tire_perp_dirs
 
         # throttle forces
         # Assumes rear wheel drive (RWD), force applied only to back wheels
         throttle_tire_force_mag     = throttle * self.wheel_torque * np.array([1.0, 1.0, 0.0, 0.0])
-        tire_throttle_forces        = throttle_tire_force_mag * tire_directions
+        tire_throttle_forces        = throttle_tire_force_mag[:,None] * tire_directions
 
         # group the forces and compute the moments
-        forces                      = np.concatenate([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity])
-        force_locations             = np.concatenate([rot_mat @ self.suspension_attach_pos, rot_mat @ wheel_body_positions, [0, 0, 0]])
-        moments                     = np.cross([force_locations, forces])
+        force_of_gravity            = np.array([0, 0, -9.81 * self.mass])[None,:]
+
+        forces                      = np.concatenate([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity], axis=0)
+        force_locations             = np.concatenate([(rot_mat @ self.suspension_attach_pos.T).T, (rot_mat @ wheel_body_positions.T).T, [[0, 0, 0]]], axis=0)
+        moments                     = np.cross(force_locations, forces)
 
         return np.sum(forces, axis=0), np.sum(moments, axis=0)
 
@@ -137,10 +139,10 @@ class Car(Vehicle):
 
 if __name__ == '__main__':
     # initial state
-    position = np.array([0.0, 0.0, 3.0])
-    velocity = np.array([0, 0, 0])
-    quaternion = [0.0, 0.0, 0.0, 1.0]
-    angular_velocity = [0.0, 0.0, 0.0]
+    position            = np.array([0.0, 0.0, 3.0])
+    velocity            = np.array([0, 0, 0])
+    quaternion          = np.array([0.0, 0.0, 0.0, 1.0])
+    angular_velocity    = [0.0, 0.0, 0.0]
 
     car = Car(position, velocity, quaternion, angular_velocity)
 
