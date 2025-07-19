@@ -34,7 +34,7 @@ def suspension_force(wheel_displacment, wheel_speed):
 def project_and_normalize(vectors, normal):
     proj = vectors - np.outer(np.dot(vectors, normal), normal)
     norms = np.linalg.norm(proj, axis=-1, keepdims=True)
-    return proj / norms
+    return proj / (norms + 1e-6)    # to avoid 0/0 error when velocity is zero
 
 
 def signed_angle(a, b, axis):
@@ -82,6 +82,7 @@ class Car(Vehicle):
 
     def compute_forces_and_moments(self, state, action) -> tuple[np.ndarray, np.ndarray]:
         pos, vel, quat, ang_vel     = state
+        print(quat)
         rot_mat                     = R.from_quat(quat).as_matrix()
         throttle, steer             = np.clip(action, [0.0, 1.0], [-1.0, 1.0])
 
@@ -139,16 +140,16 @@ class Car(Vehicle):
 
 if __name__ == '__main__':
     # initial state
-    position            = np.array([0.0, 0.0, 3.0])
+    position            = np.array([0.0, 0.0, 1.0])
     velocity            = np.array([0, 0, 0])
     quaternion          = np.array([0.0, 0.0, 0.0, 1.0])
-    angular_velocity    = [0.0, 0.0, 0.0]
+    angular_velocity    = np.array([0.0, 0.0, 0.0])
 
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = np.zeros((1000, 2))
-    dts = 0.01 * np.ones(1000)
+    action_plan = np.zeros((300, 2))
+    dts = 0.01 * np.ones(300)
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
     

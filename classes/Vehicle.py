@@ -93,8 +93,11 @@ class Vehicle(ABC):
             force, moment = self.compute_forces_and_moments(state, action)
             state = self.rk4_step(state, force, moment, dt)
             p[i+1], v[i+1], q[i+1], w[i+1] = state
+
+        for z in [p, v, q, w, t[:,None]]:
+            print(z.shape)
             
-        return np.array([p, v, q, w, t], dtype=object)
+        return p, v, q, w, t
 
     def __repr__(self):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
