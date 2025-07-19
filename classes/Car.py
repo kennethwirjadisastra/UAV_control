@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib import pyplot as plt
 from classes.Vehicle import Vehicle
 from scipy.spatial.transform import Rotation as R
 
@@ -45,11 +46,19 @@ def signed_angle(a, b, axis):
 
 # approximate stats from a tesla model 3
 class Car(Vehicle):
-    def __init__(self, **kwargs):
-        kwargs['mass'] = 1610
+    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, 
+            quaternion: np.ndarray = None, angular_velocity: np.ndarray = None,
+            mass: np.ndarray = None, inertia: np.ndarray = None):
+        kwargs = {}
+        kwargs['position']          = position
+        kwargs['velocity']          = velocity
+        kwargs['quaternion']        = quaternion
+        kwargs['angular_velocity']  = angular_velocity
+        kwargs['mass']              = mass if mass else 1610
+        kwargs['inertia']           = inertia if inertia else np.diag([550, 3200, 5600])
+        
         super().__init__(**kwargs)
 
-        self.mass                       = 1610                          # mass in kg
         self.wheel_torque               = 750                           # per rear tire
         self.wheel_coef_friction        = 0.9                           # dry coef of friction
 
@@ -121,3 +130,44 @@ class Car(Vehicle):
 
         return np.sum(forces, axis=0), np.sum(moments, axis=0)
 
+
+###################################
+## ---------- testing ---------- ##
+###################################
+
+if __name__ == '__main__':
+    # initial state
+    position = np.array([0.0, 0.0, 3.0])
+    velocity = np.array([0, 0, 0])
+    quaternion = [0.0, 0.0, 0.0, 1.0]
+    angular_velocity = [0.0, 0.0, 0.0]
+
+    car = Car(position, velocity, quaternion, angular_velocity)
+
+    # action plan and delta time
+    action_plan = np.zeros((1000, 2))
+    dts = 0.01 * np.ones(1000)
+
+    p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+    
+    fig = plt.figure(figsize=(16,6))
+    ax1 = fig.add_subplot(1, 2, 1, projection=None)
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+
+    ax1.plot(t, p[:,2], label='Aircraft Height (m)')
+    ax1.set_title('Aircraft Height')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Height (m)')
+    ax1.legend()
+    ax1.grid()
+
+    ax2.plot(*p.T, label='Aircraft Trajectory')
+    ax2.scatter(*p[0,:], label='Initial Position')
+    ax2.scatter(*p[-1,:], label='Final Position')
+    ax2.set_title('Aircraft Trajectory')
+    ax2.set_xlabel('X Position')
+    ax2.set_ylabel('Y Position')
+    ax2.set_zlabel('Z Position')
+    ax2.grid()
+    ax2.legend()
+    plt.show()
