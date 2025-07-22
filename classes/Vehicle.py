@@ -48,8 +48,7 @@ class Vehicle(ABC):
     def _compute_state_derivative(self, state, force, moment):
         p, v, q, w = state  # position, velocity, quaternion, angular velocity
         dpdt = v
-        gravity_force = np.array([0,0,-9.81])
-        dvdt = force / self.mass + gravity_force
+        dvdt = force / self.mass
         dqdt = quaternion_derivative(q, w)
         wdot = self.inv_inertia @ (moment - np.cross(w, self.inertia @ w))
         return np.array([dpdt, dvdt, dqdt, wdot], dtype=object)

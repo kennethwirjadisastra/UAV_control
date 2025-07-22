@@ -25,10 +25,10 @@ def pacejka_lateral_force(alpha):
     return D * np.sin(C * np.arctan(term - E * (term - np.arctan(term))))
 
 
-def suspension_force(wheel_displacment, wheel_speed):
+def suspension_force(wheel_displacment, wheel_speed, resting_compression=9.81*1610/4):
     k = 25000  # N/m        restoritive force
     c = 2000   # Ns/m       damping force
-    return -k * (wheel_displacment) - c * wheel_speed
+    return -k * (wheel_displacment) - c * wheel_speed - resting_compression
 
 
 def project_and_normalize(vectors, normal):
@@ -84,7 +84,7 @@ class Car(Vehicle):
         pos, vel, quat, ang_vel     = state
         print(quat)
         rot_mat                     = R.from_quat(quat).as_matrix()
-        throttle, steer             = np.clip(action, [0.0, 1.0], [-1.0, 1.0])
+        throttle, steer             = np.clip(action, [-1.0, -1.0], [1.0, 1.0])
 
 
         ang_vel_mat                 = np.array([
@@ -98,8 +98,9 @@ class Car(Vehicle):
         suspension_axis             = rot_mat @ np.array([0, 0, -1])
         wheel_world_positions       = pos + (rot_mat @ self.wheel_resting_positions.T).T
         wheel_suspension_heights    = wheel_world_positions[:, 2] / (suspension_axis[2] + 1e-6)
-
-        wheel_suspension_speeds     = (vel[2] + (rot_mat @ (ang_vel_mat @ self.wheel_resting_positions.T))[2,:]) / (suspension_axis[2] + 1e-6)
+        wheel_body_positions        = self.wheel_resting_positions + wheel_suspension_heights[:,None] * np.array([0, 0, -1])[None,:]
+        tire_velocities             = vel + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T)).T
+        wheel_suspension_speeds     = np.dot(tire_velocities, suspension_axis)
 
         suspension_mags             = suspension_force(wheel_suspension_heights, wheel_suspension_speeds)
         suspension_forces           = suspension_mags[:,None] * suspension_axis[None,:]
@@ -108,8 +109,7 @@ class Car(Vehicle):
         steer_angle                 = steer * self.max_steering_angle
         coss, sins                  = np.cos(steer_angle), np.sin(steer_angle)
         tire_directions             = (rot_mat @ np.array([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]]).T).T
-        wheel_body_positions        = self.wheel_resting_positions + wheel_suspension_heights[:,None] * np.array([0, 0, -1])[None,:]
-        tire_velocities             = vel + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T)).T
+
 
         up_dir                      = rot_mat @ np.array([0, 0, 1])
         tire_proj_vels              = project_and_normalize(tire_velocities, up_dir)
@@ -140,7 +140,7 @@ class Car(Vehicle):
 
 if __name__ == '__main__':
     # initial state
-    position            = np.array([0.0, 0.0, 1.0])
+    position            = np.array([0.0, 0.0, 0.7])
     velocity            = np.array([0, 0, 0])
     quaternion          = np.array([0.0, 0.0, 0.0, 1.0])
     angular_velocity    = np.array([0.0, 0.0, 0.0])
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = np.zeros((300, 2))
+    action_plan = np.ones((300, 2)) * np.array([1, 0])[None,:]
     dts = 0.01 * np.ones(300)
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
@@ -157,17 +157,17 @@ if __name__ == '__main__':
     ax1 = fig.add_subplot(1, 2, 1, projection=None)
     ax2 = fig.add_subplot(1, 2, 2, projection='3d')
 
-    ax1.plot(t, p[:,2], label='Aircraft Height (m)')
-    ax1.set_title('Aircraft Height')
+    ax1.plot(t, p[:,2], label='Vehicle Height (m)')
+    ax1.set_title('Vehicle Height')
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Height (m)')
     ax1.legend()
     ax1.grid()
 
-    ax2.plot(*p.T, label='Aircraft Trajectory')
+    ax2.plot(*p.T, label='Vehicle Trajectory')
     ax2.scatter(*p[0,:], label='Initial Position')
     ax2.scatter(*p[-1,:], label='Final Position')
-    ax2.set_title('Aircraft Trajectory')
+    ax2.set_title('Vehicle Trajectory')
     ax2.set_xlabel('X Position')
     ax2.set_ylabel('Y Position')
     ax2.set_zlabel('Z Position')
