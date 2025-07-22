@@ -82,7 +82,6 @@ class Car(Vehicle):
 
     def compute_forces_and_moments(self, state, action) -> tuple[np.ndarray, np.ndarray]:
         pos, vel, quat, ang_vel     = state
-        print(quat)
         rot_mat                     = R.from_quat(quat).as_matrix()
         throttle, steer             = np.clip(action, [-1.0, -1.0], [1.0, 1.0])
 
@@ -140,22 +139,24 @@ class Car(Vehicle):
 
 if __name__ == '__main__':
     # initial state
-    position            = np.array([0.0, 0.0, 0.7])
+    position            = np.array([0.0, 0.0, 0.9])
     velocity            = np.array([0, 0, 0])
     quaternion          = np.array([0.0, 0.0, 0.0, 1.0])
-    angular_velocity    = np.array([0.0, 0.0, 0.0])
+    angular_velocity    = np.array([0.1, 0.0, 0.0])
 
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = np.ones((300, 2)) * np.array([1, 0])[None,:]
+    action_plan = np.ones((300, 2)) * np.array([0.3, 0])[None,:]
     dts = 0.01 * np.ones(300)
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
     
     fig = plt.figure(figsize=(16,6))
-    ax1 = fig.add_subplot(1, 2, 1, projection=None)
-    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    ax1 = fig.add_subplot(2, 2, 1, projection=None)
+    ax2 = fig.add_subplot(2, 2, 2, projection='3d')
+    ax3 = fig.add_subplot(2, 2, 3, projection=None)
+    ax4 = fig.add_subplot(2, 2, 4, projection=None)
 
     ax1.plot(t, p[:,2], label='Vehicle Height (m)')
     ax1.set_title('Vehicle Height')
@@ -163,6 +164,7 @@ if __name__ == '__main__':
     ax1.set_ylabel('Height (m)')
     ax1.legend()
     ax1.grid()
+    ax1.axis('equal')
 
     ax2.plot(*p.T, label='Vehicle Trajectory')
     ax2.scatter(*p[0,:], label='Initial Position')
@@ -171,6 +173,25 @@ if __name__ == '__main__':
     ax2.set_xlabel('X Position')
     ax2.set_ylabel('Y Position')
     ax2.set_zlabel('Z Position')
+
+
+    ax3.plot(p[:,0], p[:,1], label='Vehicle Height (m)')
+    ax3.set_title('X-Y')
+    ax3.set_xlabel('X')
+    ax3.set_ylabel('Y')
+    ax3.legend()
+    ax3.grid()
+    ax3.axis('equal')
+
+    ax4.plot(p[:,0], p[:,2], label='Vehicle Height (m)')
+    ax4.set_title('X-Z')
+    ax4.set_xlabel('X')
+    ax4.set_ylabel('Z')
+    ax4.legend()
+    ax4.grid()
+    ax4.axis('equal')
+
     ax2.grid()
     ax2.legend()
+    ax2.axis('equal')
     plt.show()
