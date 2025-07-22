@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from classes.Vehicle import Vehicle
+from Vehicle import Vehicle
 from scipy.spatial.transform import Rotation as R
 
 
@@ -83,8 +83,8 @@ class Car(Vehicle):
     def compute_forces_and_moments(self, state, action) -> tuple[np.ndarray, np.ndarray]:
         pos, vel, quat, ang_vel     = state
         print(quat)
-        rot_mat                     = R.from_quat(quat).as_matrix()
-        throttle, steer             = np.clip(action, [0.0, 1.0], [-1.0, 1.0])
+        rot_mat                     = R.from_quat(quat, scalar_first=True).as_matrix()
+        throttle, steer             = np.clip(action, [-1.0, -1.0], [1.0, 1.0])
 
 
         ang_vel_mat                 = np.array([
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     # initial state
     position            = np.array([0.0, 0.0, 1.0])
     velocity            = np.array([0, 0, 0])
-    quaternion          = np.array([0.0, 0.0, 0.0, 1.0])
+    quaternion          = np.array([1.0, 0.0, 0.0, 0.0])
     angular_velocity    = np.array([0.0, 0.0, 0.0])
 
     car = Car(position, velocity, quaternion, angular_velocity)
@@ -174,3 +174,7 @@ if __name__ == '__main__':
     ax2.grid()
     ax2.legend()
     plt.show()
+
+    traj = np.concatenate([p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+    header = 'x,y,z,qw,qz,qy,qz'
+    np.savetxt('trajectory.csv', traj, delimiter=',')
