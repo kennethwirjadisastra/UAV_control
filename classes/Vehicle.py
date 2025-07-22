@@ -5,13 +5,13 @@ from abc import ABC, abstractmethod
 
 # necessary functions
 def quaternion_derivative(q, omega):
-    qx, qy, qz, qw = q
+    qw, qx, qy, qz = q
     ox, oy, oz = omega
     dq = 0.5 * np.array([
+        -qx*ox - qy*oy - qz*oz,
         qw*ox + qy*oz - qz*oy,
         qw*oy + qz*ox - qx*oz,
-        qw*oz + qx*oy - qy*ox,
-        -qx*ox - qy*oy - qz*oz
+        qw*oz + qx*oy - qy*ox
     ])
     return dq
 
@@ -34,7 +34,7 @@ class Vehicle(ABC):
 
     @property
     def rotation_matrix(self):
-        return R.from_quat(self.quaternion).as_matrix()
+        return R.from_quat(self.quaternion, scalar_first=True).as_matrix()
     
 
     def get_state(self):
