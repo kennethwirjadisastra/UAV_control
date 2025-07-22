@@ -24,7 +24,7 @@ class Vehicle(ABC):
         # state of the system
         self.position           = np.array([0.0, 0.0, 0.0] if position is None else position)
         self.velocity           = np.array([0.0, 0.0, 0.0] if velocity is None else velocity)
-        self.quaternion         = np.array([0.0, 0.0, 0.0, 1.0] if quaternion is None else quaternion)
+        self.quaternion         = np.array([1.0, 0.0, 0.0, 0.0] if quaternion is None else quaternion)
         self.angular_velocity   = np.array([0.0, 0.0, 0.0] if angular_velocity is None else angular_velocity)
 
         # system characteristics

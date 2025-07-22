@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from Vehicle import Vehicle
+from classes.Vehicle import Vehicle
 from scipy.spatial.transform import Rotation as R
 
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     position            = np.array([0.0, 0.0, 0.9])
     velocity            = np.array([0, 0, 0])
     quaternion          = np.array([1.0, 0.0, 0.0, 0.0])
-    angular_velocity    = np.array([0.0, 0.0, 0.0])
+    angular_velocity    = np.array([0.3, 0.0, 0.0])
 
     car = Car(position, velocity, quaternion, angular_velocity)
 
