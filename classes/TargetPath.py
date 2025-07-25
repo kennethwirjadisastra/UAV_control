@@ -16,7 +16,7 @@ class TargetPath:
         lengths = np.linalg.norm(segments, axis=-1)
         total_length = np.sum(lengths)
         norm_lenghts = lengths / total_length
-        self.normalized_cumulative_lengths = np.concat([[0], np.cumsum(norm_lenghts)])
+        self.normalized_cumulative_lengths = np.concatenate([[0], np.cumsum(norm_lenghts)])
         self.scaled_segment_vectors = (segments / lengths[:,None]) * total_length
 
     def normalized_interpolate(self, t: np.array) -> np.array:
