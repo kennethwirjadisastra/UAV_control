@@ -87,8 +87,7 @@ class Car(Vehicle):
     def compute_forces_and_moments(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
         pos, vel, quat, ang_vel     = state
         print(quat)
-        quat_np = quat.cpu().numpy() if quat.is_cuda else quat.numpy()
-        rot_mat = pt.tensor(R.from_quat(quat_np, scalar_first=True).as_matrix(), dtype=pt.float32, device=quat.device)
+        rot_mat = pt.tensor(R.from_quat(quat, scalar_first=True).as_matrix(), dtype=pt.float32, device=quat.device)
 
         throttle, steer = pt.clip(action, -1.0, 1.0)
 
@@ -159,7 +158,7 @@ if __name__ == '__main__':
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = pt.ones((1200, 2)) * pt.tensor([0.5, 0.8])[None,:]
+    action_plan = pt.ones((1200, 2)) * pt.tensor([0.5, 0.2])[None,:]
     dts = 0.01 * pt.ones(1200)
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
