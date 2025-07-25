@@ -138,7 +138,8 @@ class Car(Vehicle):
 ## ---------- testing ---------- ##
 ###################################
 
-from classes.FourViewPlot import FourViewPlot
+from visualization.FourViewPlot import FourViewPlot
+from classes.TargetPath import TargetPath
 
 if __name__ == '__main__':
     # initial state
@@ -150,14 +151,23 @@ if __name__ == '__main__':
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = np.ones((1200, 2)) * np.array([0.3, 0.8])[None,:]
+    action_plan = np.ones((1200, 2)) * np.array([0.5, 0.8])[None,:]
     dts = 0.01 * np.ones(1200)
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
     
+    # target path
+    ts = np.cumsum(dts)
+    wx = ts*5
+    wy = 5*(1-np.cos(ts))
+    wz = ts*0
+
+    waypoints = np.stack([wx, wy, wz])
+    targetPath = TargetPath(waypoints)
 
     fourPlot = FourViewPlot()
     fourPlot.addTrajectory(p, 'Vehicle', color='b')
+    fourPlot.addTrajectory(waypoints.T, 'TargetPath', color='g')
     fourPlot.show()
 
 
