@@ -132,7 +132,7 @@ class Car(Vehicle):
         force_locations                 = pt.cat([(rot_mat @ self.suspension_attach_pos.T).T, (rot_mat @ wheel_body_positions.T).T, pt.zeros((1, 3), device=rot_mat.device)], dim=0)
         moments                         = pt.linalg.cross(force_locations, forces)
 
-        return pt.sum(forces, dim=0), pt.sum(moments, dim=0)
+        return pt.sum(forces, dim=0), rot_mat.T @ pt.sum(moments, dim=0)
 
 
 ###################################
