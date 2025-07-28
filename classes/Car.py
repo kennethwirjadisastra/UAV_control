@@ -69,15 +69,15 @@ class Car(Vehicle):
         # wheel order [back_left, back_right, front_left, front_right]
         self.wheel_resting_positions    = pt.tensor([                    # displacements from center of mass in meters
                                             [-1.44, -0.81, -0.55], 
-                                            [-1.44, 0.81, -0.55], 
                                             [1.44, -0.81, -0.55], 
+                                            [-1.44, 0.81, -0.55], 
                                             [1.44, 0.81, -0.55]
                                         ], dtype=pt.float32)
         
         self.suspension_attach_pos      = pt.tensor([                     # location where wheels are attached by the suspension to the body
                                             [-1.44, -0.81, 0], 
-                                            [-1.44, 0.81, 0], 
                                             [1.44, -0.81, 0], 
+                                            [-1.44, 0.81, 0], 
                                             [1.44, 0.81, 0]
                                         ], dtype=pt.float32)
 
@@ -109,8 +109,8 @@ class Car(Vehicle):
         # tire forces
         steer_angle                     = steer * self.max_steering_angle
         coss, sins                      = pt.cos(steer_angle), pt.sin(steer_angle)
-        # tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=rot_mat.device, dtype=pt.float32).T).T
-        tire_directions                 = (rot_mat @ pt.stack([pt.tensor([1.0, 0.0, 0.0], device=steer.device)] * 2 + [pt.stack([coss, sins, pt.tensor(0.0, device=steer.device)])] * 2).T).T
+        tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=rot_mat.device, dtype=pt.float32).T).T
+        # tire_directions                 = (rot_mat @ pt.stack([pt.tensor([1.0, 0.0, 0.0], device=steer.device)] * 2 + [pt.stack([coss, sins, pt.tensor(0.0, device=steer.device)])] * 2).T).T
 
         up_dir                          = rot_mat @ pt.tensor([0, 0, 1], device=rot_mat.device, dtype=pt.float32)
         tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)
@@ -148,25 +148,26 @@ if __name__ == '__main__':
     position            = pt.tensor([0.0, 0.0, 0.55])
     velocity            = pt.tensor([0, 0, 0])
     quaternion          = pt.tensor([1.0, 0.0, 0.0, 0.0])
-    angular_velocity    = pt.tensor([0.3, 0, 0.0])
+    angular_velocity    = pt.tensor([0.0, 0, 0.0])
 
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = pt.ones((1200, 2)) * pt.tensor([0.5, 0.2])[None,:]
-    action_plan.requires_grad_(True)
-    dts = 0.01 * pt.ones(1200)
+    action_plan = pt.ones((2000, 2)) * pt.tensor([0.5, 0.25])[None,:]
+    action_plan.requires_grad_(False)
+    dts = 0.04 * pt.ones(2000)
 
-    p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+    for i in range(1):
+        p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
 
-    loss = pt.norm(p[-1,0])
-    loss.backward()
-    print(action_plan.grad)
+        # loss = pt.norm(p[-1,0])
+        # loss.backward()
+        # print(action_plan.grad)
     
     # target path
     ts = pt.cumsum(dts, dim=0)
-    wx = ts*5
-    wy = 5*(1-pt.cos(ts))
+    wx = ts
+    wy = 5*(1-pt.cos(ts/5))
     wz = ts*0
 
     waypoints = pt.stack([wx, wy, wz])
