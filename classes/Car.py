@@ -153,7 +153,7 @@ if __name__ == '__main__':
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    action_plan = pt.ones((2000, 2)) * pt.tensor([0.5, 0.25])[None,:]
+    action_plan = pt.ones((2000, 2)) * pt.tensor([0.5, 0.5])[None,:]
     action_plan.requires_grad_(False)
     dts = 0.04 * pt.ones(2000)
 
