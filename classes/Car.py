@@ -109,8 +109,8 @@ class Car(Vehicle):
         # tire forces
         steer_angle                     = steer * self.max_steering_angle
         coss, sins                      = pt.cos(steer_angle), pt.sin(steer_angle)
-        tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=rot_mat.device, dtype=pt.float32).T).T
-        # tire_directions                 = (rot_mat @ pt.stack([pt.tensor([1.0, 0.0, 0.0], device=steer.device)] * 2 + [pt.stack([coss, sins, pt.tensor(0.0, device=steer.device)])] * 2).T).T
+        # tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=rot_mat.device, dtype=pt.float32).T).T
+        tire_directions                 = (rot_mat @ pt.stack([pt.tensor([1.0, 0.0, 0.0], device=steer.device)] * 2 + [pt.stack([coss, sins, pt.tensor(0.0, device=steer.device)])] * 2).T).T
 
         up_dir                          = rot_mat @ pt.tensor([0, 0, 1], device=rot_mat.device, dtype=pt.float32)
         tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)
