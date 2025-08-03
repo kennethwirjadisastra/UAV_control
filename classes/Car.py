@@ -79,15 +79,15 @@ class Car(Vehicle):
         # wheel order [back_left, back_right, front_left, front_right]
         self.wheel_resting_positions    = pt.tensor([                    # displacements from center of mass in meters
                                             [-self.wheel_base/2,    -self.track_width/2,    -self.com_height], 
-                                            [self.wheel_base/2,     -self.track_width/2,    -self.com_height], 
                                             [-self.wheel_base/2,    self.track_width/2,     -self.com_height], 
+                                            [self.wheel_base/2,     -self.track_width/2,    -self.com_height], 
                                             [self.wheel_base/2,     self.track_width/2,     -self.com_height]
                                         ], dtype=pt.float32)
         
         self.suspension_attach_pos      = pt.tensor([                     # location where wheels are attached by the suspension to the body
                                             [-self.wheel_base/2,    -self.track_width/2,    0], 
-                                            [self.wheel_base/2,     -self.track_width/2,    0], 
                                             [-self.wheel_base/2,    self.track_width/2,     0], 
+                                            [self.wheel_base/2,     -self.track_width/2,    0], 
                                             [self.wheel_base/2,     self.track_width/2,     0]
                                         ], dtype=pt.float32)
 
@@ -97,7 +97,6 @@ class Car(Vehicle):
     def compute_forces(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
         pos, vel, quat, ang_vel         = state
         device, dtype                   = pos.device, pt.float32
-        # print(quat)
         rot_mat                         = quaternion_to_matrix(quat)
         throttle, steer                 = pt.clip(action, -1.0, 1.0)
         ang_vel_mat                     = pt.tensor([
