@@ -48,6 +48,13 @@ def signed_angle(a, b, axis):
     return pt.atan2(sign, dot)
 
 
+def ackermann_steering_angles(steering_angle, wheelbase, track_width):
+    turning_radius = wheelbase / pt.tan(steering_angle)
+    inner_angle = pt.arctan(wheelbase / (turning_radius - track_width / 2))
+    outer_angle = pt.arctan(wheelbase / (turning_radius + track_width / 2))
+    return inner_angle, outer_angle
+
+
 # approximate stats from a tesla model 3
 class Car(Vehicle):
     def __init__(self, position: pt.Tensor = None, velocity: pt.Tensor = None, 
@@ -65,20 +72,23 @@ class Car(Vehicle):
 
         self.wheel_torque               = 750                           # per rear tire
         self.wheel_coef_friction        = 0.9                           # dry coef of friction
+        self.wheel_base                 = 2.88                          # distance between front and rear axles
+        self.track_width                = 1.62                          # distance between left and right wheels
+        self.com_height                 = 0.55                          # height of center of mass above ground (resting suspension)
 
         # wheel order [back_left, back_right, front_left, front_right]
         self.wheel_resting_positions    = pt.tensor([                    # displacements from center of mass in meters
-                                            [-1.44, -0.81, -0.55], 
-                                            [1.44, -0.81, -0.55], 
-                                            [-1.44, 0.81, -0.55], 
-                                            [1.44, 0.81, -0.55]
+                                            [-self.wheel_base/2,    -self.track_width/2,    -self.com_height], 
+                                            [self.wheel_base/2,     -self.track_width/2,    -self.com_height], 
+                                            [-self.wheel_base/2,    self.track_width/2,     -self.com_height], 
+                                            [self.wheel_base/2,     self.track_width/2,     -self.com_height]
                                         ], dtype=pt.float32)
         
         self.suspension_attach_pos      = pt.tensor([                     # location where wheels are attached by the suspension to the body
-                                            [-1.44, -0.81, 0], 
-                                            [1.44, -0.81, 0], 
-                                            [-1.44, 0.81, 0], 
-                                            [1.44, 0.81, 0]
+                                            [-self.wheel_base/2,    -self.track_width/2,    0], 
+                                            [self.wheel_base/2,     -self.track_width/2,    0], 
+                                            [-self.wheel_base/2,    self.track_width/2,     0], 
+                                            [self.wheel_base/2,     self.track_width/2,     0]
                                         ], dtype=pt.float32)
 
         self.max_steering_speed         = 0.5                           # radians per second at the front wheels
@@ -108,17 +118,23 @@ class Car(Vehicle):
         suspension_forces               = suspension_mags[:, None] * suspension_axis[None, :]
 
         # tire forces
-        steer_angle                     = steer * self.max_steering_angle
-        coss, sins                      = pt.cos(steer_angle), pt.sin(steer_angle)
+        virtual_steer_angle             = steer * self.max_steering_angle
+        FL_steer, FR_steer              = ackermann_steering_angles(virtual_steer_angle, self.wheel_base, self.track_width)
+        FL_cos, FL_sin, FR_cos, FR_sin  = pt.cos(FL_steer), pt.sin(FL_steer), pt.cos(FR_steer), pt.sin(FR_steer)
         # tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=device, dtype=dtype).T).T
-        tire_directions                 = (rot_mat @ pt.stack([pt.tensor([1.0, 0.0, 0.0], device=steer.device)] * 2 + [pt.stack([coss, sins, pt.tensor(0.0, device=steer.device)])] * 2).T).T
+        tire_directions                 = (rot_mat @ pt.stack([
+                                            pt.tensor([1.0, 0.0, 0.0], device=steer.device), 
+                                            pt.tensor([1.0, 0.0, 0.0], device=steer.device), 
+                                            pt.stack([FL_cos, FL_sin, pt.tensor(0.0, device=steer.device)]), 
+                                            pt.stack([FR_cos, FR_sin, pt.tensor(0.0, device=steer.device)])
+                                        ]).T).T
 
         up_dir                          = rot_mat @ pt.tensor([0, 0, 1], device=device, dtype=dtype)
         tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)
         tire_proj_dirs                  = project_and_normalize(tire_directions, up_dir)
         slip_angles                     = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)
         tire_normal_forces              = suspension_mags * suspension_axis[2]
-        tire_perp_dirs                  = (rot_mat @ pt.tensor([[0, 1, 0], [0, 1, 0], [-sins, coss, 0], [-sins, coss, 0]], device=device, dtype=dtype).T).T
+        tire_perp_dirs                  = (rot_mat @ pt.tensor([[0, 1, 0], [0, 1, 0], [-FL_sin, FL_cos, 0], [-FR_sin, FR_cos, 0]], device=device, dtype=dtype).T).T
         tire_lateral_forces             = 0.1 * (tire_normal_forces * pacejka_lateral_force(slip_angles))[:, None] * tire_perp_dirs
 
         # throttle forces
@@ -176,7 +192,9 @@ if __name__ == '__main__':
 
     p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
 
-    def gen_traj_forces():
+    print(p[-1])
+
+    def save_traj_to_csv():
         traj_force_vecs = []
         traj_force_locs = []
         for pos, vel, quat, omega, action in zip(p[:-1], v[:-1], q[:-1], w[:-1], action_plan):
@@ -188,9 +206,14 @@ if __name__ == '__main__':
         traj_force_locs = pt.stack(traj_force_locs) + p[:-1,None,:]
 
         # Reshape and save to CSV
-        np.savetxt('blender/trajectories/traj_force_vecs.csv', traj_force_vecs.numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
-        np.savetxt('blender/trajectories/traj_force_locs.csv', traj_force_locs.numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
-    gen_traj_forces()
+        folder = 'blender/trajectories/'
+
+        np.savetxt(folder + 'traj_force_vecs.csv', traj_force_vecs.numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
+        np.savetxt(folder + 'traj_force_locs.csv', traj_force_locs.numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
+
+        traj = pt.concatenate([p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+        np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
+    save_traj_to_csv()
 
     
     # target path
@@ -208,6 +231,3 @@ if __name__ == '__main__':
     fourPlot.show()
 
 
-    traj = pt.concatenate([p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
-    header = 'x,y,z,qw,qz,qy,qz'
-    np.savetxt('trajectory.csv', traj.detach().cpu().numpy(), delimiter=',')
