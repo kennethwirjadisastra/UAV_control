@@ -7,7 +7,7 @@ import os
 
 print(os.getcwd())
 
-def create_force_arrow(name, color, location):
+def create_force_arrow(name, color):
     import bpy
 
     # Create a cylinder to represent the force arrow
@@ -124,6 +124,7 @@ with open(csv_path, newline='') as path_file, \
 
 
             arrow.location = force_pos
+            arrow.rotation_mode = 'QUATERNION'
             arrow.rotation_quaternion = force_quat
             arrow.scale = (1, 1, force_mag)
 
