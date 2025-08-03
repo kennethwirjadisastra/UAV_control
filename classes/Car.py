@@ -70,7 +70,7 @@ class Car(Vehicle):
         
         super().__init__(**kwargs)
 
-        self.wheel_torque               = 750                           # per rear tire
+        self.wheel_torque               = 750 * 9.81                    # per rear tire in newtons
         self.wheel_coef_friction        = 0.9                           # dry coef of friction
         self.wheel_base                 = 2.88                          # distance between front and rear axles
         self.track_width                = 1.62                          # distance between left and right wheels
@@ -135,7 +135,7 @@ class Car(Vehicle):
         slip_angles                     = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)
         tire_normal_forces              = suspension_mags * suspension_axis[2]
         tire_perp_dirs                  = (rot_mat @ pt.tensor([[0, 1, 0], [0, 1, 0], [-FL_sin, FL_cos, 0], [-FR_sin, FR_cos, 0]], device=device, dtype=dtype).T).T
-        tire_lateral_forces             = 0.1 * (tire_normal_forces * pacejka_lateral_force(slip_angles))[:, None] * tire_perp_dirs
+        tire_lateral_forces             = (tire_normal_forces * pacejka_lateral_force(slip_angles))[:, None] * tire_perp_dirs
 
         # throttle forces
         # Assumes rear wheel drive (RWD), force applied only to back wheels
@@ -184,7 +184,7 @@ if __name__ == '__main__':
 
     # action plan and delta time
     tf = 10
-    dt = 0.05
+    dt = 0.01
     nt = int(tf / dt)
     action_plan = pt.ones((nt, 2)) * pt.tensor([0.5, 0.5])[None,:]
     action_plan.requires_grad_(False)
