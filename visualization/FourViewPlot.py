@@ -17,6 +17,12 @@ class FourViewPlot:
         self.plotXY.plot(pos[:,0], pos[:,1], c=color)
         self.plotXZ.plot(pos[:,0], pos[:,2], c=color)
 
+    def addScatter(self, pos, name, color='b', marker='.'):
+        self.plotYZ.scatter(pos[:,1], pos[:,2], label=f'{name}', c=color, marker=marker)
+        self.plot3D.scatter(pos[:,0], pos[:,1], pos[:,2], label=f'{name}', c=color, marker=marker)
+        self.plotXY.scatter(pos[:,0], pos[:,1], label=f'{name}', c=color, marker=marker)
+        self.plotXZ.scatter(pos[:,0], pos[:,2], label=f'{name}', c=color, marker=marker)
+
     def show(self):
         self.plotYZ.set_title('Y-Z')
         self.plotYZ.set_xlabel('Y')
@@ -43,5 +49,14 @@ class FourViewPlot:
         self.plotXZ.set_ylabel('Z')
         self.plotXZ.grid()
         self.plotXZ.axis('equal')
+
+        self.fig.subplots_adjust(
+            left=0.06,
+            bottom=0.04,
+            right=0.96,
+            top=0.97,
+            wspace=0.14,
+            hspace=0.138
+        )
 
         plt.show()
