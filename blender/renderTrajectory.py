@@ -8,20 +8,36 @@ import os
 print(os.getcwd())
 
 def create_force_arrow(name, color):
-    import bpy
-
-    # Create a cylinder to represent the force arrow
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.02, depth=1, location=(0, 0, 0))
-    arrow = bpy.context.active_object
-    arrow.name = name
-
-    # Move origin to the base of the arrow (so scaling/rotation acts from the bottom)
+    # Create cylinder (shaft)
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.05, depth=1, location=(0, 0, 0))
+    shaft = bpy.context.active_object
+    shaft.name = f"{name}_shaft"
+    
+    # Move origin to the base of the shaft (so scaling/rotation acts from the bottom)
     bpy.context.scene.cursor.location = (0, 0, -0.5)  # base of unit-height cylinder
     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
-    # Assign material and color
-    mat = bpy.data.materials.new(name + '_mat')
-    mat.diffuse_color = color  # RGBA
+    # Create cone (head)
+    bpy.ops.mesh.primitive_cone_add(radius1=0.1, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
+    cone = bpy.context.active_object
+    cone.name = f"{name}_head"
+
+    # Parent cone to shaft
+    cone.parent = shaft
+    cone.matrix_parent_inverse = shaft.matrix_world.inverted()
+
+    # Join into single object
+    bpy.context.view_layer.objects.active = shaft
+    cone.select_set(True)
+    shaft.select_set(True)
+    bpy.ops.object.join()
+    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)
+
+    # Set color
+    mat = bpy.data.materials.get(name)
+    if mat is None:
+        mat = bpy.data.materials.new(name)
+    mat.diffuse_color = color  # (R, G, B, Alpha)
     arrow.data.materials.append(mat)
 
     return arrow
@@ -60,7 +76,7 @@ def delete_objects(prefixes=None, suffixes=None):
 if __name__ == '__main__':
     # Replace with your actual CSV file path
 
-    #base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/'
+    # base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/'
     base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/'
 
     csv_path        = base_path + 'trajectories/traj.csv'
@@ -70,6 +86,8 @@ if __name__ == '__main__':
 
     car = bpy.data.objects['Car']
     car.rotation_mode = 'QUATERNION'
+    if car.animation_data:
+            car.animation_data_clear()
 
     # Delete force arrows and paths
     delete_objects(prefixes = ['lat', 'susp', 'throttle', 'gravity', 'target', 'true'])
@@ -147,8 +165,6 @@ if __name__ == '__main__':
             car.keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
             for i, arrow in enumerate(force_arrows):
-                #arrow.parent = car
-                #arrow.matrix_parent_inverse = car.matrix_world.inverted()
                 force_pos = Vector((
                     float(force_loc_row[3*i]),
                     float(force_loc_row[3*i+1]),
@@ -187,5 +203,6 @@ if __name__ == '__main__':
             
             frame += 1
 
+        # plot true and target paths
         true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0)) # purple curve
         target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0)) # orange curve
