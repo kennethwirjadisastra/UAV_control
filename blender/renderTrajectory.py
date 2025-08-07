@@ -20,121 +20,172 @@ def create_force_arrow(name, color):
     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
     # Assign material and color
-    mat = bpy.data.materials.new(name + "_mat")
-    mat.diffuse_color = color  # expects (R, G, B, A)
+    mat = bpy.data.materials.new(name + '_mat')
+    mat.diffuse_color = color  # RGBA
     arrow.data.materials.append(mat)
 
     return arrow
 
+def create_path_curve(name, steps, color):
+    curve = bpy.data.curves.new(name=name, type='CURVE')
+    curve.dimensions = '3D'
+    curve.resolution_u = 2
 
-# Replace with your actual CSV file path
-csv_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/traj.csv'
-csv_force_loc = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/traj_force_locs.csv'
-csv_force_dir = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/traj_force_vecs.csv'
+    polyline = curve.splines.new('POLY')
+    polyline.points.add(len(steps)-1)
 
-car = bpy.data.objects['Car']
-car.rotation_mode = 'QUATERNION'
+    for i, step in enumerate(steps):
+        polyline.points[i].co = (step[0], step[1], step[2], 1)
 
-# suspension forces (red arrows)
-susp_rear_left = create_force_arrow('susp_rear_left', color=(1, 0, 0, 1))
-susp_rear_right = create_force_arrow('susp_rear_right', color=(1, 0, 0, 1))
-susp_front_left = create_force_arrow('susp_front_left', color=(1, 0, 0, 1))
-susp_front_right = create_force_arrow('susp_front_right', color=(1, 0, 0, 1))
+    path = bpy.data.objects.new(name, curve)
+    bpy.context.collection.objects.link(path)
 
-# lateral forces (green arrows)
-lat_rear_left = create_force_arrow('lat_rear_left', color=(0, 1,  0, 1))
-lat_rear_right = create_force_arrow('lat_rear_right', color=(0, 1,  0, 1))
-lat_front_left = create_force_arrow('lat_front_left', color=(0, 1,  0, 1))
-lat_front_right = create_force_arrow('lat_front_right', color=(0, 1,  0, 1))
+    mat = bpy.data.materials.new(name+'_mat')
+    mat.diffuse_color = color  # RGBA
+    mat.use_nodes = False
+    path.data.materials.append(mat)
 
-# throttle forces (blue arrows)
-throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0, 0, 1, 1))
-throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0, 0, 1, 1))
-throttle_front_left = create_force_arrow('throttle_front_left', color=(0, 0, 1, 1))
-throttle_front_right = create_force_arrow('throttle_front_right', color=(0, 0, 1, 1))
+    path.data.bevel_depth = 0.1
+    path.data.bevel_resolution = 3
 
-# gravity force (black arrow)
-gravity = create_force_arrow('gravity', color=(0, 0, 0, 1))
+    return path
 
-force_arrows = [
-    susp_rear_left,
-    susp_rear_right,
-    susp_front_left,
-    susp_front_right,
-    lat_rear_left,
-    lat_front_right,
-    lat_front_left,
-    lat_front_right,
-    throttle_rear_left,
-    throttle_rear_right,
-    throttle_front_left,
-    throttle_front_right,
-    gravity
-]
+def delete_objects(prefixes=None, suffixes=None):
+    for obj in bpy.data.objects:
+        if prefixes is not None and any(obj.name.startswith(prefix) for prefix in prefixes):
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if suffixes is not None and any(obj.name.endswith(suffix) for suffix in suffixes):
+            bpy.data.objects.remove(obj, do_unlink=True)
 
+if __name__ == '__main__':
+    # Replace with your actual CSV file path
 
-with open(csv_path, newline='') as path_file, \
-     open(csv_force_loc, newline='') as force_loc_file, \
-     open(csv_force_dir, newline='') as force_dir_file:
-    
-    path_reader = csv.reader(path_file)
-    force_loc_reader = csv.reader(force_loc_file)
-    force_dir_reader = csv.reader(force_dir_file)
+    #base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/'
+    base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/'
 
-    frame = 1  # start at frame 1
-    
-    for car_row, force_loc_row, force_dir_row in zip(path_reader, force_loc_reader, force_dir_reader):
-        # Parse car's position/quaternion and force lcoation/directions from each row
-        pos_x = float(car_row[0])
-        pos_y = float(car_row[1])
-        pos_z = float(car_row[2])
-        rot_w = float(car_row[3])
-        rot_x = float(car_row[4])
-        rot_y = float(car_row[5])
-        rot_z = float(car_row[6])
+    csv_path        = base_path + 'trajectories/traj.csv'
+    csv_force_loc   = base_path + 'trajectories/traj_force_locs.csv'
+    csv_force_dir   = base_path + 'trajectories/traj_force_vecs.csv'
+    csv_target      = base_path + 'trajectories/target.csv'
 
-     
+    car = bpy.data.objects['Car']
+    car.rotation_mode = 'QUATERNION'
 
-        car.location = (pos_x, pos_y, pos_z)
-        quat = Quaternion((rot_w, rot_x, rot_y, rot_z))
-        car.rotation_quaternion = quat
+    # Delete force arrows and paths
+    delete_objects(prefixes = ['lat', 'susp', 'throttle', 'gravity', 'target', 'true'])
 
-        # Insert keyframes at the current frame
-        car.keyframe_insert(data_path="location", frame=frame)
-        car.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    # suspension forces (red arrows)
+    susp_rear_left = create_force_arrow('susp_rear_left', color=(1, 0, 0, 1))
+    susp_rear_right = create_force_arrow('susp_rear_right', color=(1, 0, 0, 1))
+    susp_front_left = create_force_arrow('susp_front_left', color=(1, 0, 0, 1))
+    susp_front_right = create_force_arrow('susp_front_right', color=(1, 0, 0, 1))
 
-        for i, arrow in enumerate(force_arrows):
-            force_pos = Vector((
-                float(force_loc_row[3*i]),
-                float(force_loc_row[3*i+1]),
-                float(force_loc_row[3*i+2])
-            ))
+    # lateral forces (green arrows)
+    lat_rear_left = create_force_arrow('lat_rear_left', color=(0, 1,  0, 1))
+    lat_rear_right = create_force_arrow('lat_rear_right', color=(0, 1,  0, 1))
+    lat_front_left = create_force_arrow('lat_front_left', color=(0, 1,  0, 1))
+    lat_front_right = create_force_arrow('lat_front_right', color=(0, 1,  0, 1))
 
-            force_vec = Vector((
-                float(force_dir_row[3*i]),
-                float(force_dir_row[3*i+1]),
-                float(force_dir_row[3*i+2]),
-            ))
+    # throttle forces (blue arrows)
+    throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0, 0, 1, 1))
+    throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0, 0, 1, 1))
+    throttle_front_left = create_force_arrow('throttle_front_left', color=(0, 0, 1, 1))
+    throttle_front_right = create_force_arrow('throttle_front_right', color=(0, 0, 1, 1))
 
-            force_dir = force_vec.normalized()
-            force_mag = force_vec.length / 1000
+    # gravity force (black arrow)
+    gravity = create_force_arrow('gravity', color=(0, 0, 0, 1))
 
-            default_dir = Vector((0, 0, 1)) # default parallel to z axis
-            force_quat = default_dir.rotation_difference(force_vec.normalized())
+    force_arrows = [
+        susp_rear_left,
+        susp_rear_right,
+        susp_front_left,
+        susp_front_right,
+        lat_rear_left,
+        lat_rear_right,
+        lat_front_left,
+        lat_front_right,
+        throttle_rear_left,
+        throttle_rear_right,
+        throttle_front_left,
+        throttle_front_right,
+        gravity
+    ]
 
+    true_path = []
+    target_path = []
 
-            arrow.location = force_pos
-            arrow.rotation_mode = 'QUATERNION'
-            arrow.rotation_quaternion = force_quat
-            arrow.scale = (1, 1, force_mag)
+    with open(csv_path, newline='') as path_file, \
+        open(csv_force_loc, newline='') as force_loc_file, \
+        open(csv_force_dir, newline='') as force_dir_file, \
+        open(csv_target, newline='') as target_file:
+        
+        path_reader = csv.reader(path_file)
+        force_loc_reader = csv.reader(force_loc_file)
+        force_dir_reader = csv.reader(force_dir_file)
+        target_reader = csv.reader(target_file)
 
-            arrow.keyframe_insert(data_path='location', frame=frame)
-            arrow.keyframe_insert(data_path='rotation_quaternion', frame=frame)
-            arrow.keyframe_insert(data_path='scale', frame=frame)
-
-            if arrow.name[:3] == 'lat':
-                print(arrow.location, arrow.rotation_quaternion, arrow.scale)
-
+        frame = 1  # start at frame 1
+        
+        for path_row, force_loc_row, force_dir_row, target_row in zip(path_reader, force_loc_reader, force_dir_reader, target_reader):
+            # Parse car's position/quaternion and force lcoation/directions from each row
+            pos_x = float(path_row[0])
+            pos_y = float(path_row[1])
+            pos_z = float(path_row[2])
+            rot_w = float(path_row[3])
+            rot_x = float(path_row[4])
+            rot_y = float(path_row[5])
+            rot_z = float(path_row[6])
 
         
-        frame += 1
+
+            car.location = (pos_x, pos_y, pos_z)
+            quat = Quaternion((rot_w, rot_x, rot_y, rot_z))
+            car.rotation_quaternion = quat
+
+            # Insert keyframes at the current frame
+            car.keyframe_insert(data_path="location", frame=frame)
+            car.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+
+            for i, arrow in enumerate(force_arrows):
+                #arrow.parent = car
+                #arrow.matrix_parent_inverse = car.matrix_world.inverted()
+                force_pos = Vector((
+                    float(force_loc_row[3*i]),
+                    float(force_loc_row[3*i+1]),
+                    float(force_loc_row[3*i+2])
+                ))
+
+                force_vec = Vector((
+                    float(force_dir_row[3*i]),
+                    float(force_dir_row[3*i+1]),
+                    float(force_dir_row[3*i+2]),
+                ))
+
+                force_dir = force_vec.normalized()
+                force_mag = force_vec.length / 1000
+
+                default_dir = Vector((0, 0, 1)) # default parallel to z axis
+                force_quat = default_dir.rotation_difference(force_vec.normalized())
+
+
+                arrow.location = force_pos
+                arrow.rotation_mode = 'QUATERNION'
+                arrow.rotation_quaternion = force_quat
+                arrow.scale = (1, 1, force_mag)
+
+                arrow.keyframe_insert(data_path='location', frame=frame)
+                arrow.keyframe_insert(data_path='rotation_quaternion', frame=frame)
+                arrow.keyframe_insert(data_path='scale', frame=frame)
+
+            true_pos = (float(path_row[0]), float(path_row[1]), float(path_row[2]))
+            true_path.append(true_pos)
+               
+            target_pos = (float(target_row[0]), float(target_row[1]), float(target_row[2]))
+            target_path.append(target_pos)
+
+
+            
+            frame += 1
+
+        true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0)) # purple curve
+        target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0)) # orange curve
