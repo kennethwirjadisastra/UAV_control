@@ -82,8 +82,8 @@ class Vehicle(ABC):
             state = self.rk4_step(state, force, moment, dt)
             p[i+1], v[i+1], q[i+1], w[i+1] = state
         
-        for z in [p,v,q,t[:,None]]:
-            print(z.shape)
+        # for z in [p,v,q,t[:,None]]:
+        #     print(z.shape)
 
         return p, v, q, w, t
     

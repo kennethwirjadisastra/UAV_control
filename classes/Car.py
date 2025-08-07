@@ -48,11 +48,15 @@ def signed_angle(a, b, axis):
     return pt.atan2(sign, dot)
 
 
+# def ackermann_steering_angles(steering_angle, wheelbase, track_width):
+#     turning_radius = wheelbase / pt.tan(steering_angle)
+#     inner_angle = pt.arctan(wheelbase / (turning_radius - track_width / 2))
+#     outer_angle = pt.arctan(wheelbase / (turning_radius + track_width / 2))
+#     return inner_angle, outer_angle
+
+# temporary change to fix grad issue
 def ackermann_steering_angles(steering_angle, wheelbase, track_width):
-    turning_radius = wheelbase / pt.tan(steering_angle)
-    inner_angle = pt.arctan(wheelbase / (turning_radius - track_width / 2))
-    outer_angle = pt.arctan(wheelbase / (turning_radius + track_width / 2))
-    return inner_angle, outer_angle
+    return steering_angle, steering_angle
 
 
 # approximate stats from a tesla model 3
@@ -171,6 +175,10 @@ class Car(Vehicle):
 
 from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
+from torch.autograd.functional import jacobian
+from tqdm import trange  # tqdm range iterator
+
+
 
 if __name__ == '__main__':
     # initial state
@@ -182,14 +190,40 @@ if __name__ == '__main__':
     car = Car(position, velocity, quaternion, angular_velocity)
 
     # action plan and delta time
-    tf = 10
-    dt = 0.01
+    tf = 5
+    dt = 0.05
     nt = int(tf / dt)
     action_plan = pt.ones((nt, 2)) * pt.tensor([0.5, 0.5])[None,:]
-    action_plan.requires_grad_(False)
+    action_plan.requires_grad_(True)
     dts = dt * pt.ones(nt)
 
-    p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+    # target path
+    ts = pt.linspace(0, tf, 100)
+    wx = 5*ts
+    wy = 5*(1-pt.cos(ts))
+    wz = ts*0
+
+    waypoints = pt.stack([wx, wy, wz]).T
+    targetPath = TargetPath(waypoints)
+
+
+    # action_plan = action_plan.clone().detach().requires_grad_(True)
+    optimizer = pt.optim.Adam([action_plan], lr=1e-2)
+
+    num_iters = 100
+
+    for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
+        optimizer.zero_grad()
+        p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+        with pt.no_grad():
+            ds = pt.cumsum(pt.norm((p[1:] - p[:-1]).detach(), dim=1), dim=0)
+            Y_p = targetPath.distance_interpolate(ds)
+        losses = ((p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                                                  # per point L_2^2 loss
+        loss = losses.sum(dim=0)
+        loss.backward()
+        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
+        optimizer.step()
+    
 
     print(p[-1])
 
@@ -207,26 +241,21 @@ if __name__ == '__main__':
         # Reshape and save to CSV
         folder = 'blender/trajectories/'
 
-        np.savetxt(folder + 'traj_force_vecs.csv', traj_force_vecs.numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
-        np.savetxt(folder + 'traj_force_locs.csv', traj_force_locs.numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
+        np.savetxt(folder + 'traj_force_vecs.csv', traj_force_vecs.detach().numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
+        np.savetxt(folder + 'traj_force_locs.csv', traj_force_locs.detach().numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
 
         traj = pt.concatenate([p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
         np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     save_traj_to_csv()
 
     
-    # target path
-    ts = pt.cumsum(dts, dim=0)
-    wx = ts
-    wy = 5*(1-pt.cos(ts/5))
-    wz = ts*0
 
-    waypoints = pt.stack([wx, wy, wz])
-    targetPath = TargetPath(waypoints)
 
     fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='b')
-    fourPlot.addTrajectory(waypoints.T, 'TargetPath', color='g')
+    fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='blue')
+    fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
+    fourPlot.addScatter(p.detach().cpu().numpy(), 'X_p', color='cyan')
+    fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
     fourPlot.show()
 
 
