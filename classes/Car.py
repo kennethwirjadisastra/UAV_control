@@ -43,7 +43,7 @@ def project_and_normalize(vectors, normal):
 
 def signed_angle(a, b, axis):
     cross = pt.linalg.cross(a, b)
-    dot = pt.sum(a * b, dim=-1)
+    dot = pt.sum(a * b, dim=-1) + pt.tensor([1e-6])[...,:]
     sign = pt.sum(cross * axis, dim=-1)
     return pt.atan2(sign, dot)
 
@@ -210,7 +210,11 @@ if __name__ == '__main__':
     # action_plan = action_plan.clone().detach().requires_grad_(True)
     optimizer = pt.optim.Adam([action_plan], lr=1e-2)
 
-    num_iters = 100
+    fourPlot = FourViewPlot()
+    fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
+
+
+    num_iters = 200
 
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         optimizer.zero_grad()
@@ -223,6 +227,14 @@ if __name__ == '__main__':
         loss.backward()
         action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
         optimizer.step()
+
+        if (num_iters - epoch) % 5 == 1:
+            fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='blue')
+            fourPlot.addScatter(p.detach().cpu().numpy(), 'X_p', color='cyan')
+            fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
+            fourPlot.show()
+    plt.show()
+
     
 
     print(p[-1])
@@ -251,11 +263,5 @@ if __name__ == '__main__':
     
 
 
-    fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='blue')
-    fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
-    fourPlot.addScatter(p.detach().cpu().numpy(), 'X_p', color='cyan')
-    fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
-    fourPlot.show()
 
 
