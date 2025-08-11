@@ -204,6 +204,7 @@ if __name__ == '__main__':
     wz = ts*0
 
     waypoints = pt.stack([wx, wy, wz]).T
+    np.savetxt('blender/trajectories/target.csv', waypoints, delimiter=',')
     targetPath = TargetPath(waypoints)
 
 

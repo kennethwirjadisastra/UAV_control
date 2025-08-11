@@ -1,4 +1,5 @@
 import torch as pt
+import numpy as np
 import matplotlib.pyplot as plt
 
 # Function that interpolates between the waypoints (M,d) normalized by length
@@ -37,8 +38,8 @@ class TargetPath:
 if __name__ == '__main__':
     s = pt.linspace(0, 2, 33)
     x = s
-    y = 1 + pt.cos(s)
-    waypoints = pt.stack([x, y], axis=1)
+    y = pt.e**(s-1)
+    waypoints = pt.stack([x, y], dim=1)
 
     N = 10
     t = pt.linspace(0, 1, N+1)
