@@ -4,68 +4,57 @@ import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from util.quaternion import quaternion_derivative, quaternion_to_matrix
 
-class VehicleState():
-    def __init__(self, state=None, pos=None, vel=None, quat=None, angvel=None):
-        self.state = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=pt.float32) if state is None else state  
+class StateTensor(pt.Tensor):
+    def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None):
+        if state_vec is None:
+            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=pt.float32)
+        else:
+            state_vec = pt.as_tensor(state_vec, dtype=pt.float32)
+
+        obj = pt.Tensor._make_subclass(cls, state_vec)
         if pos is not None:
-            self.state[0:3] = pt.as_tensor(pos, dtype=pt.float32)
+            obj[..., 0:3] = pt.as_tensor(pos, dtype=pt.float32)
         if vel is not None:
-            self.state[3:6] = pt.as_tensor(vel, dtype=pt.float32)
+            obj[..., 3:6] = pt.as_tensor(vel, dtype=pt.float32)
         if quat is not None:
-            self.state[6:10] = pt.as_tensor(quat, dtype=pt.float32)
+            obj[..., 6:10] = pt.as_tensor(quat, dtype=pt.float32)
         if angvel is not None:
-            self.state[10:13] = pt.as_tensor(angvel, dtype=pt.float32)
+            obj[..., 10:13] = pt.as_tensor(angvel, dtype=pt.float32)
+        return obj
 
     @property
     def pos(self):
-        return self.state[0:3]
-    
+        return self[..., 0:3]
+
     @property
     def vel(self):
-        return self.state[3:6]
-    
+        return self[..., 3:6]
+
     @property
     def quat(self):
-        return self.state[6:10]
-    
+        return self[..., 6:10]
+
     @property
     def angvel(self):
-        return self.state[10:13]
-
+        return self[..., 10:13]
+    
+    @property
+    def rotmat(self):
+        return quaternion_to_matrix(self[..., 6:10])
 
 
 # vehicle class
 class Vehicle(ABC):
-    def __init__(self, position=None, velocity=None, 
-                 quaternion=None, angular_velocity=None,
-                 mass=None, inertia=None):
-
+    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None):
         # state of the system
-        self.position           = pt.tensor([0.0, 0.0, 0.0], dtype=pt.float32) if position is None else position.clone().detach().to(dtype=pt.float32)
-        self.velocity           = pt.tensor([0.0, 0.0, 0.0], dtype=pt.float32) if velocity is None else velocity.clone().detach().to(dtype=pt.float32)
-        self.quaternion         = pt.tensor([1.0, 0.0, 0.0, 0.0], dtype=pt.float32) if quaternion is None else quaternion.clone().detach().to(dtype=pt.float32)
-        self.angular_velocity   = pt.tensor([0.0, 0.0, 0.0], dtype=pt.float32) if angular_velocity is None else angular_velocity.clone().detach().to(dtype=pt.float32)
+        self.state              = StateTensor() if state is None else state
 
         # system characteristics
-        self.mass               = 1.0 if mass is None else float(mass)
+        self.mass               = pt.as_tensor(mass) if mass is not None else pt.tensor(1)
         self.inertia            = pt.eye(3, dtype=pt.float32) if inertia is None else inertia.clone().detach().to(dtype=pt.float32)
         self.inv_inertia        = pt.linalg.inv(self.inertia)
 
-    @property
-    def rotation_matrix(self):
-        # Returns rotation matrix corresponding to current quaternion (scalar-first convention)
-        return quaternion_to_matrix(self.quaternion)
-
-    def get_state(self):
-        # Returns current state as list of tensors
-        return [self.position, self.velocity, self.quaternion, self.angular_velocity]
-
-    def set_state(self, state):
-        # Sets state from list of tensors
-        self.position, self.velocity, self.quaternion, self.angular_velocity = state
-
-    def _compute_state_derivative(self, state, force, moment):
-        # Computes derivative of state given forces and moments
+    def _state_derivative(self, state, force, moment):
         q, w = state[..., 6:10], state[..., 10:13]
         # wdot = self.inv_inertia @ (moment - pt.linalg.cross(w, self.inertia @ w))
 
@@ -84,10 +73,10 @@ class Vehicle(ABC):
         # moment    = (B, 3)
         # dt        = (B, 1)
 
-        k1 = self._compute_state_derivative(state, force, moment)
-        k2 = self._compute_state_derivative(state + k1*dt/2, force, moment)
-        k3 = self._compute_state_derivative(state + k2*dt/2, force, moment)
-        k4 = self._compute_state_derivative(state + k3*dt, force, moment)
+        k1 = self._state_derivative(state, force, moment)
+        k2 = self._state_derivative(state + k1*dt/2, force, moment)
+        k3 = self._state_derivative(state + k2*dt/2, force, moment)
+        k4 = self._state_derivative(state + k3*dt, force, moment)
 
         next_state = state + (k1 + 2*k2 + 2*k3 + k4) * dt/6
         next_state[...,6:10] = next_state[...,6:10] / (pt.norm(next_state[...,6:10], dim=-1, keepdim=True) + 1e-12)
@@ -104,27 +93,21 @@ class Vehicle(ABC):
         # action plan       = (B, N, D)
         # dts               = (B, N)
 
-
         # Simulates the system forward in time given a sequence of actions and time steps
-        N   = action_plan.shape(-2)         # N is the number of timesteps
-        B   = initial_state.shape[:-2]      # B is the tensor of trajectories
-
-
-        # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
-        states  = pt.zeros((*B, N+1, 13))
-        time    = pt.cat([dts[..., 0]*0, pt.cumsum(dts, dim=-1)])
-
-        state = initial_state
-        states[..., 0, :] = state
+        N                   = action_plan.shape[-2]                                     # N is the number of timesteps
+        time                = pt.cat([dts[..., 0:1]*0, pt.cumsum(dts, dim=-1)])
+        states              = [initial_state]
 
         for i in range(N):
-            action              = action_plan[..., i, :]
-            dt                  = dts[..., i]
-            force, moment       = self.compute_forces_and_moments(state, action)
-            state               = self.rk4_step(state, force, moment, dt)
-            state[..., i+1, :]  = state
+            action, dt      = action_plan[..., i, :], dts[..., i]
+            force, moment   = self.compute_forces_and_moments(states[-1], action)
+            states.append(
+                self.rk4_step(states[-1], force, moment, dt)
+            )
 
-        return state[..., 0:3], state[..., 3:6], state[..., 6:10], state[..., 10:13], time
+        states = StateTensor(pt.stack(states))
+
+        return states[..., 0:3], states[..., 3:6], states[..., 6:10], states[..., 10:13], time
     
 
 
