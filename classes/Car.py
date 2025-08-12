@@ -199,8 +199,8 @@ if __name__ == '__main__':
 
     # target path
     ts = pt.linspace(0, tf, 100)
-    wx = 5*ts
-    wy = 5*(1-pt.cos(ts))
+    wx = 10*ts
+    wy = 10*(1-pt.cos(ts))
     wz = ts*0
 
     waypoints = pt.stack([wx, wy, wz]).T
@@ -215,19 +215,28 @@ if __name__ == '__main__':
     fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
 
 
-    num_iters = 200
-
+    num_iters = 500
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
-        optimizer.zero_grad()
-        p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+        # compute the trajectory without gradient
         with pt.no_grad():
+            p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
             ds = pt.cumsum(pt.norm((p[1:] - p[:-1]).detach(), dim=1), dim=0)
             Y_p = targetPath.distance_interpolate(ds)
+
+        # take 1 step for each forcing term with grad tracking
+        
+
+
+
+        optimizer.zero_grad()
+
+
+
         losses = ((p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                                                  # per point L_2^2 loss
         loss = losses.sum(dim=0)
-        loss.backward()
-        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
-        optimizer.step()
+        # loss.backward()
+        # action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
+        # optimizer.step()
 
         if (num_iters - epoch) % 5 == 1:
             fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='blue')

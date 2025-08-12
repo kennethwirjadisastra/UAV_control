@@ -4,6 +4,36 @@ import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from util.quaternion import quaternion_derivative, quaternion_to_matrix
 
+class VehicleState():
+    def __init__(self, state=None, pos=None, vel=None, quat=None, angvel=None):
+        self.state = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=pt.float32) if state is None else state  
+        if pos is not None:
+            self.state[0:3] = pt.as_tensor(pos, dtype=pt.float32)
+        if vel is not None:
+            self.state[3:6] = pt.as_tensor(vel, dtype=pt.float32)
+        if quat is not None:
+            self.state[6:10] = pt.as_tensor(quat, dtype=pt.float32)
+        if angvel is not None:
+            self.state[10:13] = pt.as_tensor(angvel, dtype=pt.float32)
+
+    @property
+    def pos(self):
+        return self.state[0:3]
+    
+    @property
+    def vel(self):
+        return self.state[3:6]
+    
+    @property
+    def quat(self):
+        return self.state[6:10]
+    
+    @property
+    def angvel(self):
+        return self.state[10:13]
+
+
+
 # vehicle class
 class Vehicle(ABC):
     def __init__(self, position=None, velocity=None, 
@@ -36,25 +66,31 @@ class Vehicle(ABC):
 
     def _compute_state_derivative(self, state, force, moment):
         # Computes derivative of state given forces and moments
-        p, v, q, w = state  # position, velocity, quaternion, angular velocity
-        dpdt = v
-        dvdt = force / self.mass
-        dqdt = quaternion_derivative(q, w)
-        wdot = self.inv_inertia @ (moment - pt.linalg.cross(w, self.inertia @ w))
-        return [dpdt, dvdt, dqdt, wdot]
+        q, w = state[..., 6:10], state[..., 10:13]
+        # wdot = self.inv_inertia @ (moment - pt.linalg.cross(w, self.inertia @ w))
+
+        return pt.cat([
+            state[..., 3:6], 
+            force / self.mass, 
+            quaternion_derivative(q, w),
+            (moment - pt.cross(w, w @ self.inertia)) @ self.inv_inertia
+        ], dim=-1)
 
     def rk4_step(self, state, force, moment, dt):
         # Computes the future state of the system after 1 step of Runge-Kutta 4th order integration
-        def euler_step(state, dynamics, dt):
-            return [x + dxdt * dt for x, dxdt in zip(state, dynamics)]
+
+        # state     = (B, 13) pos(3)+vel(3)+quat(4)+angvel(3)
+        # force     = (B, 3)
+        # moment    = (B, 3)
+        # dt        = (B, 1)
 
         k1 = self._compute_state_derivative(state, force, moment)
-        k2 = self._compute_state_derivative(euler_step(state, k1, dt/2), force, moment)
-        k3 = self._compute_state_derivative(euler_step(state, k2, dt/2), force, moment)
-        k4 = self._compute_state_derivative(euler_step(state, k3, dt), force, moment)
+        k2 = self._compute_state_derivative(state + k1*dt/2, force, moment)
+        k3 = self._compute_state_derivative(state + k2*dt/2, force, moment)
+        k4 = self._compute_state_derivative(state + k3*dt, force, moment)
 
-        next_state = [s + dt/6 * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]) for i, s in enumerate(state)]
-        next_state[2] = next_state[2] / (pt.norm(next_state[2]) + 1e-12)
+        next_state = state + (k1 + 2*k2 + 2*k3 + k4) * dt/6
+        next_state[...,6:10] = next_state[...,6:10] / (pt.norm(next_state[...,6:10], dim=-1, keepdim=True) + 1e-12)
         return next_state
 
     @abstractmethod
@@ -64,28 +100,31 @@ class Vehicle(ABC):
         pass
 
     def simulate_trajectory(self, initial_state, action_plan, dts):
+        # initial state     = (B, 13)
+        # action plan       = (B, N, D)
+        # dts               = (B, N)
+
+
         # Simulates the system forward in time given a sequence of actions and time steps
-        N = len(action_plan)
+        N   = action_plan.shape(-2)         # N is the number of timesteps
+        B   = initial_state.shape[:-2]      # B is the tensor of trajectories
+
 
         # 3d position, 3d velocity, 4d quaternion, 3d angular velocity, time
-        p = pt.zeros((N+1, 3))
-        v = pt.zeros((N+1, 3))
-        q = pt.zeros((N+1, 4))
-        w = pt.zeros((N+1, 3))
-        t = pt.cat([pt.tensor([0.0]), pt.cumsum(pt.tensor(dts), dim=0)])
+        states  = pt.zeros((*B, N+1, 13))
+        time    = pt.cat([dts[..., 0]*0, pt.cumsum(dts, dim=-1)])
 
         state = initial_state
-        p[0], v[0], q[0], w[0] = state
+        states[..., 0, :] = state
 
-        for i, (action, dt) in enumerate(zip(action_plan, dts)):
-            force, moment = self.compute_forces_and_moments(state, action)
-            state = self.rk4_step(state, force, moment, dt)
-            p[i+1], v[i+1], q[i+1], w[i+1] = state
-        
-        # for z in [p,v,q,t[:,None]]:
-        #     print(z.shape)
+        for i in range(N):
+            action              = action_plan[..., i, :]
+            dt                  = dts[..., i]
+            force, moment       = self.compute_forces_and_moments(state, action)
+            state               = self.rk4_step(state, force, moment, dt)
+            state[..., i+1, :]  = state
 
-        return p, v, q, w, t
+        return state[..., 0:3], state[..., 3:6], state[..., 6:10], state[..., 10:13], time
     
 
 

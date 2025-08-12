@@ -2,15 +2,14 @@ import torch as pt
 
 # necessary functions
 def quaternion_derivative(q, omega):
-    # Computes the time derivative of a quaternion given angular velocity omega
-    qw, qx, qy, qz = q
-    ox, oy, oz = omega
+    qw, qx, qy, qz = q[...,0], q[...,1], q[...,2], q[...,3]
+    ox, oy, oz = omega[...,0], omega[...,1], omega[...,2]
     dq = 0.5 * pt.stack([
         -qx*ox - qy*oy - qz*oz,
          qw*ox + qy*oz - qz*oy,
          qw*oy + qz*ox - qx*oz,
          qw*oz + qx*oy - qy*ox
-    ])
+    ], dim=1)
     return dq
 
 # grad tracking method to get the rotation matrix from quat
