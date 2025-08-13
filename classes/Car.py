@@ -2,6 +2,7 @@ import torch as pt
 import numpy as np
 from matplotlib import pyplot as plt
 from classes.Vehicle import Vehicle
+from classes.Vehicle import StateTensor
 from util.quaternion import quaternion_to_matrix
 
 
@@ -61,8 +62,7 @@ def ackermann_steering_angles(steering_angle, wheelbase, track_width):
 
 # approximate stats from a tesla model 3
 class Car(Vehicle):
-    def __init__(self, position: pt.Tensor = None, velocity: pt.Tensor = None, 
-            quaternion: pt.Tensor = None, angular_velocity: pt.Tensor = None,
+    def __init__(self, state: StateTensor = None,
             mass: pt.Tensor = None, inertia: pt.Tensor = None):
         kwargs = {}
         #kwargs['position']          = position
