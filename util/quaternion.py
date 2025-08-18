@@ -9,7 +9,7 @@ def quaternion_derivative(q, omega):
          qw*ox + qy*oz - qz*oy,
          qw*oy + qz*ox - qx*oz,
          qw*oz + qx*oy - qy*ox
-    ], dim=1)
+    ], dim=-1)
     return dq
 
 # grad tracking method to get the rotation matrix from quat

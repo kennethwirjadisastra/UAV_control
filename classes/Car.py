@@ -1,7 +1,7 @@
 import torch as pt
 import numpy as np
 from matplotlib import pyplot as plt
-from classes.Vehicle import Vehicle
+from classes.Vehicle import Vehicle, StateTensor
 from util.quaternion import quaternion_to_matrix
 
 
@@ -61,14 +61,9 @@ def ackermann_steering_angles(steering_angle, wheelbase, track_width):
 
 # approximate stats from a tesla model 3
 class Car(Vehicle):
-    def __init__(self, position: pt.Tensor = None, velocity: pt.Tensor = None, 
-            quaternion: pt.Tensor = None, angular_velocity: pt.Tensor = None,
-            mass: pt.Tensor = None, inertia: pt.Tensor = None):
+    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None):
         kwargs = {}
-        kwargs['position']          = position
-        kwargs['velocity']          = velocity
-        kwargs['quaternion']        = quaternion
-        kwargs['angular_velocity']  = angular_velocity
+        kwargs['state']             = state if state is not None else StateTensor()
         kwargs['mass']              = mass if mass is not None else 1610
         kwargs['inertia']           = inertia if inertia is not None else pt.diag(pt.tensor([550, 3200, 5600], dtype=pt.float32))
         
@@ -99,51 +94,45 @@ class Car(Vehicle):
         self.max_steering_angle         = 0.61                          # radians at the front tire
 
     def compute_forces(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
-        pos, vel, quat, ang_vel         = state
+        pos, vel, angvel                = state.pos, state.vel, state.angvel
         device, dtype                   = pos.device, pt.float32
-        rot_mat                         = quaternion_to_matrix(quat)
-        throttle, steer                 = pt.clip(action, -1.0, 1.0)
-        ang_vel_mat                     = pt.tensor([
-                                            [0, -ang_vel[2], ang_vel[1]],
-                                            [ang_vel[2], 0, -ang_vel[0]],
-                                            [-ang_vel[1], ang_vel[0], 0]
-                                        ], dtype=dtype, device=ang_vel.device)
+        rot_mat                         = state.rotmat
+        throttle, steer                 = action[..., 0], action[..., 1]
+        angvel_mat                      = pt.tensor([
+                                            [0, -angvel[2], angvel[1]],
+                                            [angvel[2], 0, -angvel[0]],
+                                            [-angvel[1], angvel[0], 0]
+                                        ], dtype=dtype, device=angvel.device)
 
         # suspension forces
         suspension_axis                 = rot_mat @ pt.tensor([0, 0, -1], device=device, dtype=dtype)
         wheel_world_positions           = pos + (rot_mat @ self.wheel_resting_positions.T).T
         wheel_suspension_heights        = wheel_world_positions[:, 2] / (suspension_axis[2] + 1e-6)
         wheel_body_positions            = self.wheel_resting_positions + wheel_suspension_heights[:, None] * pt.tensor([0, 0, -1], device=device, dtype=dtype)
-        tire_velocities                 = vel + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T)).T
+        tire_velocities                 = vel + (rot_mat @ (angvel_mat @ wheel_body_positions.T)).T
         wheel_suspension_speeds         = pt.sum(tire_velocities * suspension_axis[None, :], dim=-1)
 
         suspension_mags                 = suspension_force(wheel_suspension_heights, wheel_suspension_speeds)
         suspension_forces               = suspension_mags[:, None] * suspension_axis[None, :]
 
         # tire forces
-        virtual_steer_angle             = steer * self.max_steering_angle
-        FL_steer, FR_steer              = ackermann_steering_angles(virtual_steer_angle, self.wheel_base, self.track_width)
-        FL_cos, FL_sin, FR_cos, FR_sin  = pt.cos(FL_steer), pt.sin(FL_steer), pt.cos(FR_steer), pt.sin(FR_steer)
-        # tire_directions                 = (rot_mat @ pt.tensor([[1, 0, 0], [1, 0, 0], [coss, sins, 0], [coss, sins, 0]], device=device, dtype=dtype).T).T
-        tire_directions                 = (rot_mat @ pt.stack([
-                                            pt.tensor([1.0, 0.0, 0.0], device=steer.device), 
-                                            pt.tensor([1.0, 0.0, 0.0], device=steer.device), 
-                                            pt.stack([FL_cos, FL_sin, pt.tensor(0.0, device=steer.device)]), 
-                                            pt.stack([FR_cos, FR_sin, pt.tensor(0.0, device=steer.device)])
-                                        ]).T).T
+        virtual_steer_angle             = steer * self.max_steering_angle                                                       # (B)
+        steering_angles                 = virtual_steer_angle[..., None] * pt.tensor([0, 0, 1, 1])                              # (B, 4)
+        scos, ssin, szero               = pt.cos(steering_angles), pt.sin(steering_angles), pt.zeros_like(steering_angles)      # (B, 4), (B, 4), (B, 4)
+        tire_dirs                       = (rot_mat @ pt.stack([scos, ssin, szero], dim=-2)).T
+        tire_perp_dirs                  = (rot_mat @ pt.stack([-ssin, scos, szero], dim=-2)).T
 
         up_dir                          = rot_mat @ pt.tensor([0, 0, 1], device=device, dtype=dtype)
         tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)
-        tire_proj_dirs                  = project_and_normalize(tire_directions, up_dir)
+        tire_proj_dirs                  = project_and_normalize(tire_dirs, up_dir)
         slip_angles                     = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)
         tire_normal_forces              = suspension_mags * suspension_axis[2]
-        tire_perp_dirs                  = (rot_mat @ pt.tensor([[0, 1, 0], [0, 1, 0], [-FL_sin, FL_cos, 0], [-FR_sin, FR_cos, 0]], device=device, dtype=dtype).T).T
         tire_lateral_forces             = (tire_normal_forces * pacejka_lateral_force(slip_angles))[:, None] * tire_perp_dirs
 
         # throttle forces
         # Assumes rear wheel drive (RWD), force applied only to back wheels
         throttle_tire_force_mag         = throttle * self.wheel_torque * pt.tensor([1.0, 1.0, 0.0, 0.0], device=device, dtype=dtype)
-        tire_throttle_forces            = throttle_tire_force_mag[:, None] * tire_directions
+        tire_throttle_forces            = throttle_tire_force_mag[:, None] * tire_dirs
 
         # group the forces and compute the moments
         force_of_gravity                = pt.tensor([0, 0, -9.81 * self.mass], device=device, dtype=dtype)[None, :]
@@ -181,13 +170,13 @@ from tqdm import trange  # tqdm range iterator
 
 
 if __name__ == '__main__':
-    # initial state
-    position            = pt.tensor([0.0, 0.0, 0.55])
-    velocity            = pt.tensor([0, 0, 0])
-    quaternion          = pt.tensor([1.0, 0.0, 0.0, 0.0])
-    angular_velocity    = pt.tensor([0.0, 0, 0.0])
-
-    car = Car(position, velocity, quaternion, angular_velocity)
+    init_state = StateTensor(
+        pos     = [0, 0, 0.55],
+        vel     = [0, 0, 0],
+        quat    = [1, 0, 0, 0],
+        angvel  = [0, 0, 0],
+    )
+    car = Car(init_state)
 
     # action plan and delta time
     tf = 5
@@ -219,15 +208,12 @@ if __name__ == '__main__':
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         # compute the trajectory without gradient
         with pt.no_grad():
-            p, v, q, w, t = car.simulate_trajectory(car.get_state(), action_plan, dts)
+            p, v, q, w, t = car.simulate_trajectory(init_state, action_plan, dts)
             ds = pt.cumsum(pt.norm((p[1:] - p[:-1]).detach(), dim=1), dim=0)
             Y_p = targetPath.distance_interpolate(ds)
 
         # take 1 step for each forcing term with grad tracking
         
-
-
-
         optimizer.zero_grad()
 
 
