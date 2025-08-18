@@ -100,16 +100,12 @@ class Car(Vehicle):
         throttle, steer                 = action[..., 0], action[..., 1]
 
         # (B, 3, 3)
+        wx, wy, wz, wzero               = angvel[..., 0], angvel[..., 1], angvel[..., 2], pt.zeros_like(angvel[..., 0])
         ang_vel_mat                     = pt.stack([
-                                            pt.stack([zeros, -wz,   wy], dim=1),
-                                            pt.stack([wz,    zeros, -wx], dim=1),
-                                            pt.stack([-wy,   wx,    zeros], dim=1)
-                                        ], dim=2) # (B, 3, 3)
-        #ang_vel_mat                     = pt.tensor([
-        #                                    [0, -ang_vel[2], ang_vel[1]],
-        #                                    [ang_vel[2], 0, -ang_vel[0]],
-        #                                    [-ang_vel[1], ang_vel[0], 0]
-        #                                ], dtype=dtype, device=ang_vel.device)
+                                            pt.stack([wzero, -wz,   wy], dim=-1),
+                                            pt.stack([wz,    wzero, -wx], dim=-1),
+                                            pt.stack([-wy,   wx,    wzero], dim=-1)
+                                        ], dim=-2) # (B, 3, 3)
 
         # suspension forces
         B                               = state.shape[0]
