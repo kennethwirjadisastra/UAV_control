@@ -81,41 +81,42 @@ class Car(Vehicle):
                                             [-self.wheel_base/2,    self.track_width/2,     -self.com_height], 
                                             [self.wheel_base/2,     -self.track_width/2,    -self.com_height], 
                                             [self.wheel_base/2,     self.track_width/2,     -self.com_height]
-                                        ], dtype=pt.float32)
+                                        ], dtype=pt.float32).T
         
         self.suspension_attach_pos      = pt.tensor([                     # location where wheels are attached by the suspension to the body
                                             [-self.wheel_base/2,    -self.track_width/2,    0], 
                                             [-self.wheel_base/2,    self.track_width/2,     0], 
                                             [self.wheel_base/2,     -self.track_width/2,    0], 
                                             [self.wheel_base/2,     self.track_width/2,     0]
-                                        ], dtype=pt.float32)
+                                        ], dtype=pt.float32).T
 
         self.max_steering_speed         = 0.5                           # radians per second at the front wheels
         self.max_steering_angle         = 0.61                          # radians at the front tire
 
-    def compute_forces(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
+    def compute_forces(self, state: StateTensor, action) -> tuple[pt.Tensor, pt.Tensor]:
         pos, vel, angvel                = state.pos, state.vel, state.angvel
-        device, dtype                   = pos.device, pt.float32
+        device, dtype, batch            = state.device, state.dtype, state.batch_size
         rot_mat                         = state.rotmat
         throttle, steer                 = action[..., 0], action[..., 1]
 
         # (B, 3, 3)
-        wx, wy, wz, wzero               = angvel[..., 0], angvel[..., 1], angvel[..., 2], pt.zeros_like(angvel[..., 0])
-        ang_vel_mat                     = pt.stack([
-                                            pt.stack([wzero, -wz,   wy], dim=-1),
-                                            pt.stack([wz,    wzero, -wx], dim=-1),
-                                            pt.stack([-wy,   wx,    wzero], dim=-1)
-                                        ], dim=-2) # (B, 3, 3)
+        wx, wy, wz                      = angvel[..., 0], angvel[..., 1], angvel[..., 2]
+        ang_vel_mat                     = pt.zeros((*batch, 3, 3), device=device, dtype=dtype)
+        ang_vel_mat[..., 0, 1]          = -wz
+        ang_vel_mat[..., 0, 2]          =  wy
+        ang_vel_mat[..., 1, 0]          =  wz
+        ang_vel_mat[..., 1, 2]          = -wx
+        ang_vel_mat[..., 2, 0]          = -wy
+        ang_vel_mat[..., 2, 1]          =  wx
+
+        # pos (B, 3, 1)
 
         # suspension forces
-        B                               = state.shape[0]
-        z_down                          = pt.cat([ # (B, 3)
-                                            pt.zeros(B, 2, device=device, dtype=dtype),
-                                            pt.ones(B, 1, device=device, dtype=dtype)
-                                           ], dim=1)
-        suspension_axis                 = (rot_mat @ z_down[..., None]).squeeze(-1)  # (B, 3)
-        wheel_world_positions           = pos + (rot_mat @ self.wheel_resting_positions.T[None]).T
-        wheel_suspension_heights        = wheel_world_positions[..., 2] / (suspension_axis[..., 2] + 1e-6)
+        z_down                          = pt.tensor([0, 0, -1]).unsqueeze(-1)                                           # (3, 1)
+
+        suspension_axis                 = rot_mat @ z_down                                                              # (B, 3, 3) @ (3, 1) -> (B, 3, 1)
+        wheel_world_positions           = pos.unsqueeze(-1) + (rot_mat @ self.wheel_resting_positions)                  # (B, 3, 3) @ (3, 4) -> (3, 4)
+        wheel_suspension_heights        = wheel_world_positions[..., 2, :] / (suspension_axis[..., 2, :] + 1e-6)
         wheel_body_positions            = self.wheel_resting_positions + wheel_suspension_heights[..., None, :] * pt.tensor([0, 0, -1], device=device, dtype=dtype)
         tire_velocities                 = vel[..., None, :] + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T[None])).T # (B, 4, 3)
         wheel_suspension_speeds         = pt.sum(tire_velocities * suspension_axis[..., None, :], dim=-1) # (B, 4)

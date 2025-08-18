@@ -23,24 +23,28 @@ class StateTensor(pt.Tensor):
         return obj
 
     @property
-    def pos(self):
+    def pos(self) -> pt.Tensor:
         return self[..., 0:3]
 
     @property
-    def vel(self):
+    def vel(self) -> pt.Tensor:
         return self[..., 3:6]
 
     @property
-    def quat(self):
+    def quat(self) -> pt.Tensor:
         return self[..., 6:10]
 
     @property
-    def angvel(self):
+    def angvel(self) -> pt.Tensor:
         return self[..., 10:13]
     
     @property
-    def rotmat(self):
+    def rotmat(self) -> pt.Tensor:
         return quaternion_to_matrix(self[..., 6:10])
+    
+    @property
+    def batch_size(self) -> tuple:
+        return self.shape[:-1]
 
 
 # vehicle class
