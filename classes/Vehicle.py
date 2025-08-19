@@ -39,7 +39,19 @@ class StateTensor(pt.Tensor):
         return self[..., 10:13]
     
     @property
-    def rotmat(self) -> pt.Tensor:
+    def angvel_mat(self) -> pt.Tensor:
+        wx, wy, wz      = self[..., 10], self[..., 11], self[..., 12]
+        mat             = pt.zeros((*self.shape[:-1], 3, 3), device=self.device, dtype=self.dtype)
+        mat[..., 0, 1]  = -wz
+        mat[..., 0, 2]  =  wy
+        mat[..., 1, 0]  =  wz
+        mat[..., 1, 2]  = -wx
+        mat[..., 2, 0]  = -wy
+        mat[..., 2, 1]  =  wx
+        return mat
+    
+    @property
+    def rot_mat(self) -> pt.Tensor:
         return quaternion_to_matrix(self[..., 6:10])
     
     @property

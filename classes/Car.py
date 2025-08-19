@@ -2,7 +2,6 @@ import torch as pt
 import numpy as np
 from matplotlib import pyplot as plt
 from classes.Vehicle import Vehicle, StateTensor
-from util.quaternion import quaternion_to_matrix
 
 
 def pacejka_lateral_force(alpha):
@@ -29,22 +28,21 @@ def pacejka_lateral_force(alpha):
 def suspension_force(wheel_displacement, wheel_speed, resting_compression=9.81*1610/4):
     k = 25000  # N/m        restorative force
     c = 2000   # Ns/m       damping force
-    return -k * (wheel_displacement) - c * wheel_speed - resting_compression
+    return -k * (wheel_displacement) - c * wheel_speed - resting_compression        # (B, 1, 4) - (B, 1, 4) - (1)
 
 
-def project_and_normalize(vectors, normal):
+def project_and_normalize(vectors, normal):     # (*B, 3, N), (*B, 3, 1)
     # Project vectors onto plane orthogonal to normal
-    # vectors shape (B,N,3), normal shape (3,)
-    dot = pt.sum(vectors * normal[..., None, :], dim=-1, keepdim=True)  # (B,N,1)
-    proj = vectors - dot * normal[..., None, :]
+    dot = pt.sum(vectors * normal, dim=-2, keepdim=True)  # sum over the 3-component axis
+    proj = vectors - dot * normal
     norms = pt.linalg.norm(proj, dim=-2, keepdim=True)
-    return proj / (norms + 1e-6)  # avoid div by zero
+    return proj / (norms + 1e-6)
 
 
-def signed_angle(a, b, axis):
-    cross = pt.linalg.cross(a, b)
-    dot = pt.sum(a * b, dim=-1) + pt.tensor([1e-6])[...,:]
-    sign = pt.sum(cross * axis, dim=-1)
+def signed_angle(a, b, axis):                   # (*B, 3, N), (*B, 3, N), (*B, 3, 1) -> (*B, 3, N)
+    cross = pt.linalg.cross(a, b, dim=-2)
+    dot = pt.sum(a * b, dim=-2, keepdim=True) + 1e-6
+    sign = pt.sum(cross * axis, dim=-2, keepdim=True)
     return pt.atan2(sign, dot)
 
 
@@ -93,84 +91,76 @@ class Car(Vehicle):
         self.max_steering_speed         = 0.5                           # radians per second at the front wheels
         self.max_steering_angle         = 0.61                          # radians at the front tire
 
-    def compute_forces(self, state: StateTensor, action) -> tuple[pt.Tensor, pt.Tensor]:
+    # takes a state (B, 13) and corresponding action (B, 2)
+    # returns forces (B, 3, N) and moments (B, 3, N)
+    def compute_forces(self, state: StateTensor, action: pt.Tensor) -> tuple[pt.Tensor, pt.Tensor]:
         pos, vel, angvel                = state.pos, state.vel, state.angvel
         device, dtype, batch            = state.device, state.dtype, state.batch_size
-        rot_mat                         = state.rotmat
-        throttle, steer                 = action[..., 0], action[..., 1]
-
-        # (B, 3, 3)
-        wx, wy, wz                      = angvel[..., 0], angvel[..., 1], angvel[..., 2]
-        ang_vel_mat                     = pt.zeros((*batch, 3, 3), device=device, dtype=dtype)
-        ang_vel_mat[..., 0, 1]          = -wz
-        ang_vel_mat[..., 0, 2]          =  wy
-        ang_vel_mat[..., 1, 0]          =  wz
-        ang_vel_mat[..., 1, 2]          = -wx
-        ang_vel_mat[..., 2, 0]          = -wy
-        ang_vel_mat[..., 2, 1]          =  wx
-
-        # pos (B, 3, 1)
+        rot_mat, angvel_mat             = state.rot_mat, state.angvel_mat
+        throttle, steer                 = action[..., 0], action[..., 1]                                                    # (B, 1), (B, 1)
 
         # suspension forces
-        z_down                          = pt.tensor([0, 0, -1]).unsqueeze(-1)                                           # (3, 1)
-
-        suspension_axis                 = rot_mat @ z_down                                                              # (B, 3, 3) @ (3, 1) -> (B, 3, 1)
-        wheel_world_positions           = pos.unsqueeze(-1) + (rot_mat @ self.wheel_resting_positions)                  # (B, 3, 3) @ (3, 4) -> (3, 4)
-        wheel_suspension_heights        = wheel_world_positions[..., 2, :] / (suspension_axis[..., 2, :] + 1e-6)
-        wheel_body_positions            = self.wheel_resting_positions + wheel_suspension_heights[..., None, :] * pt.tensor([0, 0, -1], device=device, dtype=dtype)
-        tire_velocities                 = vel[..., None, :] + (rot_mat @ (ang_vel_mat @ wheel_body_positions.T[None])).T # (B, 4, 3)
-        wheel_suspension_speeds         = pt.sum(tire_velocities * suspension_axis[..., None, :], dim=-1) # (B, 4)
-
-        suspension_mags                 = suspension_force(wheel_suspension_heights, wheel_suspension_speeds)
-        suspension_forces               = suspension_mags[..., None, :] * suspension_axis
+        z_down                          = pt.tensor([0, 0, -1], device=device, dtype=dtype).unsqueeze(-1)                   # (3, 1)
+        suspension_axis                 = rot_mat @ z_down                                                                  # (B, 3, 3) @ (3, 1) -> (B, 3, 1)
+        wheel_world_positions           = pos.unsqueeze(-1) + (rot_mat @ self.wheel_resting_positions)                      # (B, 3, 3) @ (3, 4) -> (3, 4)
+        wheel_suspension_heights        = wheel_world_positions[..., 2:3, :] / (suspension_axis[..., 2:3, :] + 1e-6)        # (B, 3, 4) -> (B, 1, 4)
+        wheel_body_positions            = self.wheel_resting_positions + wheel_suspension_heights * z_down                  # (3, 4) + ((B, 1, 4) * (3, 1)) -> (B, 3, 4)
+        tire_velocities                 = vel.unsqueeze(-1) + (rot_mat @ (angvel_mat @ wheel_body_positions))               # (B, 3, 1) + ((B, 3, 3) @ ((B, 3, 3) @ (B, 3, 4)) -> (B, 3, 4)
+        wheel_suspension_speeds         = pt.sum(tire_velocities * suspension_axis, dim=-2, keepdim=True)                   # (B, 3, 4) * (3, 1) -> (B, 3, 4) -> (B, 4)
+        suspension_mags                 = suspension_force(wheel_suspension_heights, wheel_suspension_speeds)               # (B, 1, 4), (B, 1, 4) -> (B, 1, 4)
+        suspension_forces               = suspension_mags * suspension_axis                                                 # (B, 1, 4) * (3, 1) -> (B, 3, 4)
 
         # tire forces
-        virtual_steer_angle             = steer * self.max_steering_angle                                                       # (B)
-        steering_angles                 = virtual_steer_angle[..., None] * pt.tensor([0, 0, 1, 1], dim=-1)                      # (B, 4)
-        scos, ssin, szero               = pt.cos(steering_angles), pt.sin(steering_angles), pt.zeros_like(steering_angles)      # (B, 4), (B, 4), (B, 4)
-        tire_dirs                       = (rot_mat @ pt.stack([scos, ssin, szero], dim=-2)).T                                   # (B, 4, 3)
-        tire_perp_dirs                  = (rot_mat @ pt.stack([-ssin, scos, szero], dim=-2)).T
-        
+        virtual_steer_angle             = steer.unsqueeze(-1) * self.max_steering_angle                                     # (B, 1) * (1) -> (B, 1)
+        steering_mask                   = pt.tensor([0, 0, 1, 1], dtype=dtype, device=device)                               # (4)
+        steering_angles                 = virtual_steer_angle * steering_mask                                               # (B, 4) * (4) -> (B, 4)
+        scos, ssin, szero               = pt.cos(steering_angles), pt.sin(steering_angles), pt.zeros_like(steering_angles)  # (B, 4), (B, 4), (B, 4)
+        tire_dirs                       = rot_mat @ pt.stack([scos, ssin, szero], dim=-2)                                   # (B, 3, 3) @ (B, 3, 4) -> (B, 3, 4)
+        tire_perp_dirs                  = rot_mat @ pt.stack([-ssin, scos, szero], dim=-2)                                  # (B, 3, 3) @ (B, 3, 4) -> (B, 3, 4)
+
         # tire directions
-        up_dir                          = (rot_mat @ pt.tensor([0, 0, 1], device=device, dtype=dtype).reshape(1,-1,1)).squeeze(-1) # (B, 3)
-        tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)
-        tire_proj_dirs                  = project_and_normalize(tire_dirs, up_dir)
-        tire_proj_dirs                  = project_and_normalize(tire_dirs, up_dir)
-        slip_angles                     = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)
-        tire_normal_forces              = suspension_mags[..., None] * suspension_axis[..., 2] # (B, 1)
-        tire_lateral_forces             = (tire_normal_forces * pacejka_lateral_force(slip_angles))[:, None] * tire_perp_dirs
+        up_dir                          = -suspension_axis                                                                  # (B, 3, 1)
+        tire_proj_vels                  = project_and_normalize(tire_velocities, up_dir)                                    # (B, 3, 4), (B, 3, 1) -> (B, 3, 4)
+        tire_proj_dirs                  = project_and_normalize(tire_dirs, up_dir)                                          # (B, 3, 4), (B, 3, 1) -> (B, 3, 4)
+        slip_angles                     = signed_angle(tire_proj_vels, tire_proj_dirs, up_dir)                              # (B, 3, 4), (B, 3, 4) -> (B, 1, 4)
+        tire_normal_forces              = suspension_mags * suspension_axis[..., 2:3, :]                                    # (B, 1, 4) * (B, 1, 1) -> (B, 1, 4)
+        tire_lateral_forces             = tire_normal_forces * pacejka_lateral_force(slip_angles) * tire_perp_dirs          # ((B, 1, 4) * (B, 1, 4)) * (B, 3, 4) -> (B, 3, 4)
 
 
         # throttle forces
         # Assumes rear wheel drive (RWD), force applied only to back wheels
-        throttle_tire_force_mag         = throttle[..., None] * self.wheel_torque * pt.tensor([1.0, 1.0, 0.0, 0.0], device=device, dtype=dtype)[None] # (B, 4)
-        tire_throttle_forces            = throttle_tire_force_mag[...] * tire_dirs[None]                                                              # (B, 4)
+        acceleration_mask               = pt.tensor([1, 1, 0, 0], device=device, dtype=dtype)                               # (4)
+        throttle_tire_force_mag         = (throttle.unsqueeze(-1) * self.wheel_torque * acceleration_mask).unsqueeze(-2)    # (B, 1) * (1) * (4) -> (B, 1, 4)
+        tire_throttle_forces            = throttle_tire_force_mag * tire_dirs                                               # (B, 1, 4) * (B, 3, 4) -> (B, 3, 4)
 
         # group the forces and compute the moments
-        force_of_gravity                = pt.tensor([0, 0, -9.81 * self.mass], device=device, dtype=dtype)[None, None, :]
-        
+        batch_zero_vec                  = pt.zeros((*batch, 3, 1), dtype=dtype, device=device)                              # (B, 3, 1)
+        force_of_gravity                = (9.81 * self.mass * z_down) + batch_zero_vec                                      # (3, 1) + (*B, 3, 1) -> (*B, 3, 1)
+        forces                          = pt.cat([                                                                          # (B, 3, 4), (B, 3, 4), (B, 3, 4), (3, 1) -> (B, 3, 13)
+                                            suspension_forces, tire_lateral_forces, tire_throttle_forces, force_of_gravity
+                                        ], dim=-1)
 
-        forces                          = pt.cat([suspension_forces, tire_lateral_forces, tire_throttle_forces, force_of_gravity], dim=0)
-
-        suspension_force_location       = (rot_mat @ self.suspension_attach_pos.T[None]).T # (B, 4, 3)
-        tire_force_location             = (rot_mat @ wheel_body_positions.T[None]).T       # (B, 4, 3)
-        gravity_force_location          = pt.zeros((B, 1, 3), device=device, dtype=dtype)
-        force_locations                 = pt.cat([suspension_force_location, tire_force_location, tire_force_location, gravity_force_location], dim=1)
+        suspension_force_location       = rot_mat @ self.suspension_attach_pos                                              # (B, 3, 3) @ (3, 4) -> (B, 3, 4)
+        tire_force_location             = rot_mat @ wheel_body_positions                                                    # (B, 3, 3) @ (3, 4) -> (B, 3, 4)
+        gravity_force_location          = batch_zero_vec
+        force_locations                 = pt.cat([suspension_force_location, tire_force_location, tire_force_location, gravity_force_location], dim=-1)
 
         return forces, force_locations, rot_mat
 
+    # takes a state (B, 13) and corresponding action (B, 2)
+    # returns net force (B, 3) and net moment (B, 3)
     def compute_forces_and_moments(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
         # state     = (B, 13)
-        # forces    = (B, P, D)
-        # moments   = (B, P, D)
+        # forces    = (B, 3, N)
+        # moments   = (B, 3, N)
         
         forces, force_locations, rot_mat    = self.compute_forces(state, action)
 
         # forces                          = pt.cat([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity], dim=0)
         # force_locations                 = pt.cat([(rot_mat @ self.suspension_attach_pos.T).T, (rot_mat @ wheel_body_positions.T).T, pt.zeros((1, 3), device=rot_mat.device)], dim=0)
-        moments                             = pt.linalg.cross(force_locations, forces)
+        moments                             = pt.linalg.cross(force_locations, forces, dim=-2)          # (B, 3, N), (B, 3, N) -> (B, 3, N)
 
-        return pt.sum(forces, dim=1), rot_mat.T @ pt.sum(moments, dim=1)
+        return pt.sum(forces, dim=-1), (rot_mat.T @ pt.sum(moments, dim=-1, keepdim=True)).squeeze(-1)  # (B, 3, N) -> (B, 3); (B, 3, 3) @ (B, 3, 1) -> (B, 3, 1) -> (B, 3)
     
 
 ###################################
