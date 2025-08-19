@@ -1,25 +1,32 @@
 import torch as pt
-from torchdiffeq import odeint
+# from torchdiffeq import odeint
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from util.quaternion import quaternion_derivative, quaternion_to_matrix
+from util.functions import dict_default
 
 class StateTensor(pt.Tensor):
-    def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None):
+    def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None, **kwargs):
+        dict_default(kwargs, 'dtype', pt.float32)
+        dict_default(kwargs, 'device', None)
+        requires_grad = kwargs.get('requires_grad', False)
+        kwargs.pop('requires_grad', None)
+        
         if state_vec is None:
-            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=pt.float32)
+            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], requires_grad=requires_grad, **kwargs)
         else:
-            state_vec = pt.as_tensor(state_vec, dtype=pt.float32)
+            state_vec = pt.as_tensor(state_vec, **kwargs)
+            state_vec.requires_grad_ = requires_grad
 
         obj = pt.Tensor._make_subclass(cls, state_vec)
         if pos is not None:
-            obj[..., 0:3] = pt.as_tensor(pos, dtype=pt.float32)
+            obj[..., 0:3] = pt.as_tensor(pos, **kwargs)
         if vel is not None:
-            obj[..., 3:6] = pt.as_tensor(vel, dtype=pt.float32)
+            obj[..., 3:6] = pt.as_tensor(vel, **kwargs)
         if quat is not None:
-            obj[..., 6:10] = pt.as_tensor(quat, dtype=pt.float32)
+            obj[..., 6:10] = pt.as_tensor(quat, **kwargs)
         if angvel is not None:
-            obj[..., 10:13] = pt.as_tensor(angvel, dtype=pt.float32)
+            obj[..., 10:13] = pt.as_tensor(angvel, **kwargs)
         return obj
 
     @property
@@ -61,24 +68,29 @@ class StateTensor(pt.Tensor):
 
 # vehicle class
 class Vehicle(ABC):
-    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None):
+    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None, **kwargs):
+        dict_default(kwargs,    'dtype',            pt.float32)
+        dict_default(kwargs,    'device',           None)
+        dict_default(kwargs,    'requires_grad',    False)
+        self.dtype              = kwargs['dtype']
+        self.device             = kwargs['device']
+
         # state of the system
-        self.state              = StateTensor() if state is None else state
+        self.state              = StateTensor(**kwargs) if state is None else state
 
         # system characteristics
-        self.mass               = pt.as_tensor(mass) if mass is not None else pt.tensor(1)
-        self.inertia            = pt.eye(3, dtype=pt.float32) if inertia is None else inertia.clone().detach().to(dtype=pt.float32)
+        self.mass               = pt.as_tensor(mass) if mass is not None else pt.tensor(1, dtype=self.dtype, device=self.device)
+        self.inertia            = pt.eye(3, dtype=self.dtype, device=self.device) if inertia is None else inertia.clone().detach().to(dtype=self.dtype, device=self.device)
         self.inv_inertia        = pt.linalg.inv(self.inertia)
 
     def _state_derivative(self, state, force, moment):
         q, w = state[..., 6:10], state[..., 10:13]
-        # wdot = self.inv_inertia @ (moment - pt.linalg.cross(w, self.inertia @ w))
 
         return pt.cat([
             state[..., 3:6], 
             force / self.mass, 
             quaternion_derivative(q, w),
-            (moment - pt.cross(w, w @ self.inertia)) @ self.inv_inertia
+            (moment - pt.cross(w, w @ self.inertia, dim=-1)) @ self.inv_inertia
         ], dim=-1)
 
     def rk4_step(self, state, force, moment, dt):
