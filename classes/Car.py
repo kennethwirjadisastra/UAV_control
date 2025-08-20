@@ -33,16 +33,16 @@ def suspension_force(wheel_displacement, wheel_speed, resting_compression=9.81*1
 
 def project_and_normalize(vectors, normal):     # (*B, 3, N), (*B, 3, 1)
     # Project vectors onto plane orthogonal to normal
-    dot = pt.sum(vectors * normal, dim=-2, keepdim=True)  # sum over the 3-component axis
-    proj = vectors - dot * normal
-    norms = pt.linalg.norm(proj, dim=-2, keepdim=True)
+    dot     = pt.sum(vectors * normal, dim=-2, keepdim=True)  # sum over the 3-component axis
+    proj    = vectors - dot * normal
+    norms   = pt.norm(proj, dim=-2, keepdim=True)
     return proj / (norms + 1e-6)
 
 
 def signed_angle(a, b, axis):                   # (*B, 3, N), (*B, 3, N), (*B, 3, 1) -> (*B, 3, N)
-    cross = pt.linalg.cross(a, b, dim=-2)
-    dot = pt.sum(a * b, dim=-2, keepdim=True) + 1e-6
-    sign = pt.sum(cross * axis, dim=-2, keepdim=True)
+    cross   = pt.cross(a, b, dim=-2)
+    dot     = pt.sum(a * b, dim=-2, keepdim=True) + 1e-6
+    sign    = pt.sum(cross * axis, dim=-2, keepdim=True)
     return pt.atan2(sign, dot)
 
 
@@ -79,14 +79,14 @@ class Car(Vehicle):
                                             [-self.wheel_base/2,    self.track_width/2,     -self.com_height], 
                                             [self.wheel_base/2,     -self.track_width/2,    -self.com_height], 
                                             [self.wheel_base/2,     self.track_width/2,     -self.com_height]
-                                        ], dtype=pt.float32).T
+                                        ], dtype=self.dtype, device=self.device).T
         
         self.suspension_attach_pos      = pt.tensor([                     # location where wheels are attached by the suspension to the body
                                             [-self.wheel_base/2,    -self.track_width/2,    0], 
                                             [-self.wheel_base/2,    self.track_width/2,     0], 
                                             [self.wheel_base/2,     -self.track_width/2,    0], 
                                             [self.wheel_base/2,     self.track_width/2,     0]
-                                        ], dtype=pt.float32).T
+                                        ], dtype=self.dtype, device=self.device).T
 
         self.max_steering_speed         = 0.5                           # radians per second at the front wheels
         self.max_steering_angle         = 0.61                          # radians at the front tire
@@ -158,7 +158,7 @@ class Car(Vehicle):
 
         # forces                          = pt.cat([suspension_forces, tire_lateral_forces + tire_throttle_forces, force_of_gravity], dim=0)
         # force_locations                 = pt.cat([(rot_mat @ self.suspension_attach_pos.T).T, (rot_mat @ wheel_body_positions.T).T, pt.zeros((1, 3), device=rot_mat.device)], dim=0)
-        moments                             = pt.linalg.cross(force_locations, forces, dim=-2)          # (B, 3, N), (B, 3, N) -> (B, 3, N)
+        moments                             = pt.cross(force_locations, forces, dim=-2)          # (B, 3, N), (B, 3, N) -> (B, 3, N)
 
         return pt.sum(forces, dim=-1), (rot_mat.T @ pt.sum(moments, dim=-1, keepdim=True)).squeeze(-1)  # (B, 3, N) -> (B, 3); (B, 3, 3) @ (B, 3, 1) -> (B, 3, 1) -> (B, 3)
     
@@ -176,13 +176,6 @@ from tqdm import trange  # tqdm range iterator
 
 
 if __name__ == '__main__':
-    init_state = StateTensor(
-        pos     = [0, 0, 0.55],
-        vel     = [0, 0, 0],
-        quat    = [1, 0, 0, 0],
-        angvel  = [0, 0, 0],
-    )
-    car = Car(init_state)
     init_state = StateTensor(
         pos     = [0, 0, 0.55],
         vel     = [0, 0, 0],
@@ -220,46 +213,44 @@ if __name__ == '__main__':
     num_iters = 500
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         # compute the trajectory without gradient
+        # with pt.no_grad():
+        optimizer.zero_grad()
+        X_p, v, q, w, t     = car.simulate_trajectory(init_state, action_plan, dts)
+
         with pt.no_grad():
-            p, v, q, w, t = car.simulate_trajectory(init_state, action_plan, dts)
-            p, v, q, w, t = car.simulate_trajectory(init_state, action_plan, dts)
-            ds = pt.cumsum(pt.norm((p[1:] - p[:-1]).detach(), dim=1), dim=0)
-            Y_p = targetPath.distance_interpolate(ds)
+            arclength           = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]).detach(), dim=1), dim=0)
+            Y_p: pt.tensor      = targetPath.distance_interpolate(arclength)
 
         # take 1 step for each forcing term with grad tracking
-        
-        
-        optimizer.zero_grad()
+        losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                                                  # per point L_2^2 loss
+        time_scale = pt.exp(-0.1*t[...,1:])
 
-
-
-        losses = ((p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                                                  # per point L_2^2 loss
-        loss = losses.sum(dim=0)
-        # loss.backward()
-        # action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
-        # optimizer.step()
+        loss = (losses * time_scale).sum(dim=0)
+        loss.backward()
+        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
+        optimizer.step()
 
         if (num_iters - epoch) % 5 == 1:
-            fourPlot.addTrajectory(p.detach().cpu().numpy(), 'Vehicle', color='blue')
-            fourPlot.addScatter(p.detach().cpu().numpy(), 'X_p', color='cyan')
+            fourPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
+            fourPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
             fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
             fourPlot.show()
     plt.show()
 
     
 
-    print(p[-1])
+    print(X_p[-1])
 
     def save_traj_to_csv():
         traj_force_vecs = []
         traj_force_locs = []
-        for pos, vel, quat, omega, action in zip(p[:-1], v[:-1], q[:-1], w[:-1], action_plan):
+        for pos, vel, quat, omega, action in zip(X_p[:-1], v[:-1], q[:-1], w[:-1], action_plan):
             state = [pos, vel, quat, omega]
             force_vecs, force_locs, _ = car.compute_forces(state, action)
             traj_force_vecs.append(force_vecs)
             traj_force_locs.append(force_locs)
         traj_force_vecs = pt.stack(traj_force_vecs)
-        traj_force_locs = pt.stack(traj_force_locs) + p[:-1,None,:]
+        traj_force_locs = pt.stack(traj_force_locs) + X_p[:-1,None,:]
 
         # Reshape and save to CSV
         folder = 'blender/trajectories/'
@@ -267,6 +258,6 @@ if __name__ == '__main__':
         np.savetxt(folder + 'traj_force_vecs.csv', traj_force_vecs.detach().numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
         np.savetxt(folder + 'traj_force_locs.csv', traj_force_locs.detach().numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
 
-        traj = pt.concatenate([p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+        traj = pt.concatenate([X_p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
         np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     save_traj_to_csv()

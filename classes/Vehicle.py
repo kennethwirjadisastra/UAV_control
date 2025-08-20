@@ -13,12 +13,11 @@ class StateTensor(pt.Tensor):
         kwargs.pop('requires_grad', None)
         
         if state_vec is None:
-            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], requires_grad=requires_grad, **kwargs)
+            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], **kwargs)
         else:
             state_vec = pt.as_tensor(state_vec, **kwargs)
-            state_vec.requires_grad_ = requires_grad
 
-        obj = pt.Tensor._make_subclass(cls, state_vec)
+        obj = pt.Tensor._make_subclass(cls, state_vec, require_grad=requires_grad)
         if pos is not None:
             obj[..., 0:3] = pt.as_tensor(pos, **kwargs)
         if vel is not None:
@@ -69,9 +68,8 @@ class StateTensor(pt.Tensor):
 # vehicle class
 class Vehicle(ABC):
     def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None, **kwargs):
-        dict_default(kwargs,    'dtype',            pt.float32)
-        dict_default(kwargs,    'device',           None)
-        dict_default(kwargs,    'requires_grad',    False)
+        dict_default(kwargs,    'dtype',    pt.float32)
+        dict_default(kwargs,    'device',   None)
         self.dtype              = kwargs['dtype']
         self.device             = kwargs['device']
 
@@ -79,7 +77,7 @@ class Vehicle(ABC):
         self.state              = StateTensor(**kwargs) if state is None else state
 
         # system characteristics
-        self.mass               = pt.as_tensor(mass) if mass is not None else pt.tensor(1, dtype=self.dtype, device=self.device)
+        self.mass               = pt.tensor(1, dtype=self.dtype, device=self.device) if mass is None else pt.as_tensor(mass, dtype=self.dtype, device=self.device) 
         self.inertia            = pt.eye(3, dtype=self.dtype, device=self.device) if inertia is None else inertia.clone().detach().to(dtype=self.dtype, device=self.device)
         self.inv_inertia        = pt.linalg.inv(self.inertia)
 
@@ -106,8 +104,12 @@ class Vehicle(ABC):
         k3 = self._state_derivative(state + k2*dt/2, force, moment)
         k4 = self._state_derivative(state + k3*dt, force, moment)
 
-        next_state = state + (k1 + 2*k2 + 2*k3 + k4) * dt/6
-        next_state[...,6:10] = next_state[...,6:10] / (pt.norm(next_state[...,6:10], dim=-1, keepdim=True) + 1e-12)
+        raw_next_state = state + (k1 + 2*k2 + 2*k3 + k4) * dt/6
+        next_state = pt.cat([
+            raw_next_state[..., 0:6], 
+            raw_next_state[..., 6:10] / (pt.norm(raw_next_state[...,6:10], dim=-1, keepdim=True) + 1e-12),
+            raw_next_state[..., 10:13]
+        ], dim=-1)
         return next_state
 
     @abstractmethod
@@ -124,18 +126,20 @@ class Vehicle(ABC):
         # Simulates the system forward in time given a sequence of actions and time steps
         N                   = action_plan.shape[-2]                                     # N is the number of timesteps
         time                = pt.cat([dts[..., 0:1]*0, pt.cumsum(dts, dim=-1)])
-        states              = [initial_state]
+        states_list         = [initial_state]
 
         for i in range(N):
             action, dt      = action_plan[..., i, :], dts[..., i]
-            force, moment   = self.compute_forces_and_moments(states[-1], action)
-            states.append(
-                self.rk4_step(states[-1], force, moment, dt)
+            force, moment   = self.compute_forces_and_moments(states_list[-1], action)
+            states_list.append(
+                self.rk4_step(states_list[-1], force, moment, dt)
             )
 
-        states = StateTensor(pt.stack(states))
+        states_tensor = pt.stack(states_list)
+        # states = StateTensor(states, requires_grad=states.requires_grad)
 
-        return states[..., 0:3], states[..., 3:6], states[..., 6:10], states[..., 10:13], time
+        # return states.pos, states.vel, states.quat, states.angvel, time
+        return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
     
 
 
