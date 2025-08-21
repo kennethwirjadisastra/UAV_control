@@ -1,0 +1,63 @@
+import torch as pt
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import trange
+from classes.Vehicle import Vehicle, StateTensor
+from classes.TargetPath import TargetPath
+from visualization.FourViewPlot import FourViewPlot
+
+def optimize_along_path(
+        vehicle: Vehicle, action_plan: pt.Tensor, delta_time: pt.Tensor, target: TargetPath, 
+        steps: int = 100, lr: float = 0.03,
+        discount_rate: float = 0.25, acc_reg: float = 0.001,
+        plot_freq: int = 5, save_folder = 'blender/trajectories/'
+    ):
+
+    np.savetxt(save_folder + 'target.csv', target.waypoints, delimiter=',')
+    fourPlot = FourViewPlot()
+    fourPlot.addTrajectory(target.waypoints, 'TargetPath', color='red')
+
+    optimizer = pt.optim.Adam([action_plan], lr=lr)
+    for step in trange(steps, desc='Optimizing action plan', unit='iter'):
+        optimizer.zero_grad()
+
+        # compute the fowards trajectory
+        X_p, X_v, q, w, t   = vehicle.simulate_trajectory(vehicle.state, action_plan, delta_time)
+
+        # assign targets for each point along the path with no grad
+        with pt.no_grad():
+            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:,0:2] - X_p[:-1,0:2]), dim=-1), dim=-1)  # unscaled
+            arc_dists       = (target.total_length / raw_arc_dists[-1]) * raw_arc_dists
+            Y_p: pt.tensor  = target.distance_interpolate(arc_dists)
+
+        # compute the loss
+        dist_losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                          # per point L_2^2 loss
+        acc_losses  = ((X_v[1:,0:2] - X_v[:-1,0:2]) ** 2).sum(dim=1) / delta_time ** 2      # per point acceleration ^ 2 loss
+        time_scale  = discount_rate ** t[...,1:]                                            # negaive exponential scaling with discount rate
+        loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
+
+        # compute the backwards gradient and update the action plan
+        loss.backward()
+        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
+        optimizer.step()
+
+        if step == 0 or (steps - step) % plot_freq == 1:
+            fourPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
+            fourPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
+            fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
+            fourPlot.show()
+
+    # save the trajectory
+    with pt.no_grad():
+        state = StateTensor(state_vec=pt.cat([X_p[:-1], X_v[:-1], q[:-1], w[:-1]], dim=-1))
+        force_vecs, force_locs, _ = vehicle.compute_forces(state, action_plan)
+        force_locs += X_p[:-1,:,None]
+
+        # Reshape and save to CSV
+
+        np.savetxt(save_folder + 'traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
+        np.savetxt(save_folder + 'traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
+
+        traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+        np.savetxt(save_folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
+    plt.show()

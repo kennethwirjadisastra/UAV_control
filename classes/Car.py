@@ -168,10 +168,9 @@ class Car(Vehicle):
 ###################################
 
 
-from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
-from torch.autograd.functional import jacobian
 from tqdm import trange  # tqdm range iterator
+from util.optimize import optimize_along_path
 
 
 
@@ -182,7 +181,6 @@ if __name__ == '__main__':
         quat    = [1, 0, 0, 0],
         angvel  = [0, 0, 0],
     )
-    car = Car(init_state)
 
     # action plan and delta time
     tf = 5
@@ -199,65 +197,8 @@ if __name__ == '__main__':
     wz = ts*0
 
     waypoints = pt.stack([wx, wy, wz]).T
-    np.savetxt('blender/trajectories/target.csv', waypoints, delimiter=',')
-    targetPath = TargetPath(waypoints)
 
-
-    # action_plan = action_plan.clone().detach().requires_grad_(True)
-    optimizer = pt.optim.Adam([action_plan], lr=3e-2)
-
-    fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
-
-
-    num_iters = 400
-    for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
-        # compute the trajectory without gradient
-        # with pt.no_grad():
-        optimizer.zero_grad()
-        X_p, X_v, q, w, t     = car.simulate_trajectory(init_state, action_plan, dts)
-
-        with pt.no_grad():
-            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:,0:2] - X_p[:-1,0:2]), dim=-1), dim=-1)  # unscaled
-            arc_dists       = (targetPath.total_length / raw_arc_dists[-1]) * raw_arc_dists
-            Y_p: pt.tensor  = targetPath.distance_interpolate(arc_dists)
-
-        # take 1 step for each forcing term with grad tracking
-
-
-        dist_losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                      # per point L_2^2 loss
-        acc_losses  = ((X_v[1:,0:2] - X_v[:-1,0:2]) ** 2).sum(dim=1) / dts ** 2     # per point acceleration ^ 2
-
-        time_scale = 0.25 ** t[...,1:]
-
-        loss = ((dist_losses + 0.001 * acc_losses) * time_scale).sum(dim=0)
-        loss.backward()
-        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
-        optimizer.step()
-
-        if (num_iters - epoch) % 5 == 1:
-            fourPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
-            fourPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
-            fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
-            fourPlot.show()
-    plt.show()
-
-    
-
-    print(X_p[-1])
-
-    def save_traj_to_csv():
-        with pt.no_grad():
-            state = StateTensor(state_vec=pt.cat([X_p[:-1], X_v[:-1], q[:-1], w[:-1]], dim=-1))
-            force_vecs, force_locs, _ = car.compute_forces(state, action_plan)
-            force_locs += X_p[:-1,:,None]
-
-            # Reshape and save to CSV
-            folder = 'blender/trajectories/'
-
-            np.savetxt(folder + 'traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
-            np.savetxt(folder + 'traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
-
-            traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
-            np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
-    save_traj_to_csv()
+    optimize_along_path(
+        vehicle=Car(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
+        steps=100, lr=2e-3, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
+    )
