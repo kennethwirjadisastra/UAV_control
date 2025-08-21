@@ -53,11 +53,10 @@ class Quadcopter(Vehicle):
                                             [0.08, -0.08, -0.01], 
                                             [-0.08, 0.08, -0.01], 
                                             [0.08, 0.08, -0.01]
-                                        ], dtype=pt.float32)
+                                        ], dtype=pt.float32).T                      # (3, 4)
         
-        self.B_thrust_dir           = pt.tensor([
-                                        [0.0, 0.0, 1.0]
-                                    ])
+        self.B_thrust_dir           = pt.tensor([0.0, 0.0, 1.0]).unsqueeze(-1)      # (3, 1)
+        self.z_down                 = pt.tensor([0, 0, -1], dtype=pt.float32, device=None).unsqueeze(-1)
 
     '''# expects net world force and net body moment
     def compute_forces_and_moments(self, state, action) -> tuple[pt.Tensor, pt.Tensor]:
@@ -83,28 +82,24 @@ class Quadcopter(Vehicle):
 
     
     def compute_forces(self, state: StateTensor, action: pt.Tensor) -> tuple [pt.Tensor, pt.Tensor]:
-        pos, vel, quat, ang_vel = state.pos, state.vel, state.quat, state.angvel                        # (B, 3), (B, 3), (B, 4), (B, 3)
+        vel                     = state.vel                     # (B, 3)
+        BW_rot_mat              = state.rot_mat                 # (B, 3, 3)
         device, dtype, batch    = state.device, state.dtype, state.batch_size
-        rot_mat, angvel_mat     = state.rot_mat, state.angvel_mat                                       # (B, 3, 3), (B, 3, 3)
-        throttle                = pt.clip(action, -1.0, 1.0)                                            # (B, 4)
 
+        throttle                = pt.clip(action, -1.0, 1.0).unsqueeze(-2)                              # (B, 1, 4)
 
-        W_drag                  = -self.drag_coef * vel                                                 # (1,) * (B, 3) -> (B, 3)
-        B_thrust                = self.peak_motor_thrust * throttle[:,None] * self.B_thrust_dir         # (1,) * (B, 1, 4) *  (3, 1) -> (B, 4, 3)
-        W_thrust                = (rot_mat @ B_thrust.T)                                                # (B, 3, 3) @ (B, 3, 4) -> (B, 3, 4)
-        W_gravity               = pt.tensor([0, 0, -9.81 * self.mass])                                  # (3, )
+        W_drag                  = (-self.drag_coef * vel).unsqueeze(-1)                                 # (1) * (B, 3) -> (B, 3, 1)
+        B_thrust                = self.peak_motor_thrust * throttle * self.B_thrust_dir                 # (1) * (B, 1, 4) * (3, 1) -> (B, 3, 4)
+        W_thrust                = BW_rot_mat @ B_thrust                                                 # (B, 3, 3) @ (B, 3, 4) -> (B, 3, 4)
 
+        batch_zero_vec          = pt.zeros((*batch, 3, 1), dtype=dtype, device=device)                  # (B, 3, 1)
+        W_gravity               = 9.81 * self.mass * self.z_down + batch_zero_vec                       # (3, 1) + (*B, 3, 1) -> (*B, 3, 1)
+        W_forces                = pt.cat([W_drag, W_thrust, W_gravity], dim=-1)     # (B, 3, 6)
 
-        forces = pt.cat([W_drag[:, None], W_thrust, W_gravity[:, None]], dim=-1)
+        thrust_locations        = BW_rot_mat @ self.B_thrust_locs
+        W_force_locations       = pt.cat([batch_zero_vec, thrust_locations, batch_zero_vec], dim=-1)   # (B, 3, 6)
 
-        drag_location           = state.pos
-        thrust_locations        = self.B_thrust_locs + state.pos
-        gravity_locations       = state.pos
-
-        force_locations         = pt.cat([drag_location[:,None], thrust_locations.T, gravity_locations[:,None]], dim=-1)
-        print(forces.shape, force_locations.shape)
-
-        return forces, force_locations, rot_mat
+        return W_forces, W_force_locations, BW_rot_mat
 
 
     def compute_forces_and_moments(self, state: StateTensor, action: pt.Tensor) -> tuple [pt.Tensor, pt.Tensor]:
@@ -163,7 +158,7 @@ if __name__ == '__main__':
     dt = 0.05
     nstep = int(tf / dt)
     action_plan = pt.ones((nstep, 4)) * pt.tensor([0, 0, 0, 0])[None,:]
-    action_plan.requires_grad_(False)
+    action_plan.requires_grad_(True)
     dts = dt * pt.ones(nstep)
     
 
@@ -182,7 +177,7 @@ if __name__ == '__main__':
     fourPlot = FourViewPlot()
     fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
 
-    num_iters = 10
+    num_iters = 500
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         optimizer.zero_grad()
         X_p, X_v, q, w, t  = drone.simulate_trajectory(init_state, action_plan, dts)
