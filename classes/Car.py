@@ -210,7 +210,7 @@ if __name__ == '__main__':
     fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
 
 
-    num_iters = 100
+    num_iters = 400
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         # compute the trajectory without gradient
         # with pt.no_grad():
@@ -255,8 +255,8 @@ if __name__ == '__main__':
             # Reshape and save to CSV
             folder = 'blender/trajectories/'
 
-            np.savetxt(folder + 'traj_force_vecs.csv', force_vecs.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
-            np.savetxt(folder + 'traj_force_locs.csv', force_locs.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
+            np.savetxt(folder + 'traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
+            np.savetxt(folder + 'traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
 
             traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
             np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
