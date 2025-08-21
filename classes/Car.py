@@ -94,7 +94,7 @@ class Car(Vehicle):
     # takes a state (B, 13) and corresponding action (B, 2)
     # returns forces (B, 3, N) and moments (B, 3, N)
     def compute_forces(self, state: StateTensor, action: pt.Tensor) -> tuple[pt.Tensor, pt.Tensor]:
-        pos, vel, angvel                = state.pos, state.vel, state.angvel
+        pos, vel                        = state.pos, state.vel
         device, dtype, batch            = state.device, state.dtype, state.batch_size
         rot_mat, angvel_mat             = state.rot_mat, state.angvel_mat
         throttle, steer                 = action[..., 0], action[..., 1]                                                    # (B, 1), (B, 1)
@@ -188,14 +188,14 @@ if __name__ == '__main__':
     tf = 5
     dt = 0.05
     nt = int(tf / dt)
-    action_plan = pt.ones((nt, 2)) * pt.tensor([0.5, 0.5])[None,:]
+    action_plan = pt.ones((nt, 2)) * pt.tensor([0.5, 0.0])[None,:]
     action_plan.requires_grad_(True)
     dts = dt * pt.ones(nt)
 
     # target path
     ts = pt.linspace(0, tf, 100)
     wx = 10*ts
-    wy = 10*(1-pt.cos(ts))
+    wy = 10*(1-pt.cos(ts * 0.8))
     wz = ts*0
 
     waypoints = pt.stack([wx, wy, wz]).T
@@ -204,28 +204,33 @@ if __name__ == '__main__':
 
 
     # action_plan = action_plan.clone().detach().requires_grad_(True)
-    optimizer = pt.optim.Adam([action_plan], lr=1e-2)
+    optimizer = pt.optim.Adam([action_plan], lr=3e-2)
 
     fourPlot = FourViewPlot()
     fourPlot.addTrajectory(waypoints, 'TargetPath', color='red')
 
 
-    num_iters = 500
+    num_iters = 100
     for epoch in trange(num_iters, desc='Optimizing action plan', unit='iter'):
         # compute the trajectory without gradient
         # with pt.no_grad():
         optimizer.zero_grad()
-        X_p, v, q, w, t     = car.simulate_trajectory(init_state, action_plan, dts)
+        X_p, X_v, q, w, t     = car.simulate_trajectory(init_state, action_plan, dts)
 
         with pt.no_grad():
-            arclength           = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]).detach(), dim=1), dim=0)
-            Y_p: pt.tensor      = targetPath.distance_interpolate(arclength)
+            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:,0:2] - X_p[:-1,0:2]), dim=-1), dim=-1)  # unscaled
+            arc_dists       = (targetPath.total_length / raw_arc_dists[-1]) * raw_arc_dists
+            Y_p: pt.tensor  = targetPath.distance_interpolate(arc_dists)
 
         # take 1 step for each forcing term with grad tracking
-        losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                                                  # per point L_2^2 loss
-        time_scale = pt.exp(-0.1*t[...,1:])
 
-        loss = (losses * time_scale).sum(dim=0)
+
+        dist_losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                      # per point L_2^2 loss
+        acc_losses  = ((X_v[1:,0:2] - X_v[:-1,0:2]) ** 2).sum(dim=1) / dts ** 2     # per point acceleration ^ 2
+
+        time_scale = 0.25 ** t[...,1:]
+
+        loss = ((dist_losses + 0.001 * acc_losses) * time_scale).sum(dim=0)
         loss.backward()
         action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
         optimizer.step()
@@ -242,22 +247,17 @@ if __name__ == '__main__':
     print(X_p[-1])
 
     def save_traj_to_csv():
-        traj_force_vecs = []
-        traj_force_locs = []
-        for pos, vel, quat, omega, action in zip(X_p[:-1], v[:-1], q[:-1], w[:-1], action_plan):
-            state = [pos, vel, quat, omega]
-            force_vecs, force_locs, _ = car.compute_forces(state, action)
-            traj_force_vecs.append(force_vecs)
-            traj_force_locs.append(force_locs)
-        traj_force_vecs = pt.stack(traj_force_vecs)
-        traj_force_locs = pt.stack(traj_force_locs) + X_p[:-1,None,:]
+        with pt.no_grad():
+            state = StateTensor(state_vec=pt.cat([X_p[:-1], X_v[:-1], q[:-1], w[:-1]], dim=-1))
+            force_vecs, force_locs, _ = car.compute_forces(state, action_plan)
+            force_locs += X_p[:-1,:,None]
 
-        # Reshape and save to CSV
-        folder = 'blender/trajectories/'
+            # Reshape and save to CSV
+            folder = 'blender/trajectories/'
 
-        np.savetxt(folder + 'traj_force_vecs.csv', traj_force_vecs.detach().numpy().reshape(traj_force_vecs.shape[0], -1), delimiter=',')
-        np.savetxt(folder + 'traj_force_locs.csv', traj_force_locs.detach().numpy().reshape(traj_force_locs.shape[0], -1), delimiter=',')
+            np.savetxt(folder + 'traj_force_vecs.csv', force_vecs.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
+            np.savetxt(folder + 'traj_force_locs.csv', force_locs.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
 
-        traj = pt.concatenate([X_p,q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
-        np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
+            traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+            np.savetxt(folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     save_traj_to_csv()
