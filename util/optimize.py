@@ -26,13 +26,13 @@ def optimize_along_path(
 
         # assign targets for each point along the path with no grad
         with pt.no_grad():
-            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:,0:2] - X_p[:-1,0:2]), dim=-1), dim=-1)  # unscaled
+            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]), dim=-1), dim=-1)  # unscaled
             arc_dists       = (target.total_length / raw_arc_dists[-1]) * raw_arc_dists
             Y_p: pt.tensor  = target.distance_interpolate(arc_dists)
 
         # compute the loss
-        dist_losses = ((X_p[1:,0:2] - Y_p[:,0:2]) ** 2).sum(dim=1)                          # per point L_2^2 loss
-        acc_losses  = ((X_v[1:,0:2] - X_v[:-1,0:2]) ** 2).sum(dim=1) / delta_time ** 2      # per point acceleration ^ 2 loss
+        dist_losses = ((X_p[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss
+        acc_losses  = ((X_v[1:] - X_v[:-1]) ** 2).sum(dim=1) / delta_time ** 2      # per point acceleration ^ 2 loss
         time_scale  = discount_rate ** t[...,1:]                                            # negaive exponential scaling with discount rate
         loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
 
