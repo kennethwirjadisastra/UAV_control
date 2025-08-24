@@ -7,9 +7,9 @@ import os
 
 print(os.getcwd())
 
-def create_force_arrow(name, color):
+def create_force_arrow(name, color, radius=0.0125):
     # Create cylinder (shaft)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.05, depth=1, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=1, location=(0, 0, 0))
     shaft = bpy.context.active_object
     shaft.name = f"{name}_shaft"
     
@@ -18,7 +18,7 @@ def create_force_arrow(name, color):
     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
     # Create cone (head)
-    bpy.ops.mesh.primitive_cone_add(radius1=0.1, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
+    '''bpy.ops.mesh.primitive_cone_add(radius1=radius*2, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
     cone = bpy.context.active_object
     cone.name = f"{name}_head"
 
@@ -31,18 +31,18 @@ def create_force_arrow(name, color):
     cone.select_set(True)
     shaft.select_set(True)
     bpy.ops.object.join()
-    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)
+    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)'''
 
     # Set color
     mat = bpy.data.materials.get(name)
     if mat is None:
         mat = bpy.data.materials.new(name)
     mat.diffuse_color = color  # (R, G, B, Alpha)
-    arrow.data.materials.append(mat)
+    shaft.data.materials.append(mat)
 
-    return arrow
+    return shaft
 
-def create_path_curve(name, steps, color, width):
+def create_path_curve(name, steps, color, radius):
     curve = bpy.data.curves.new(name=name, type='CURVE')
     curve.dimensions = '3D'
     curve.resolution_u = 2
@@ -61,7 +61,7 @@ def create_path_curve(name, steps, color, width):
     mat.use_nodes = False
     path.data.materials.append(mat)
 
-    path.data.bevel_depth = width
+    path.data.bevel_depth = radius
     path.data.bevel_resolution = 3
 
     return path
@@ -90,7 +90,7 @@ if __name__ == '__main__':
             drone.animation_data_clear()
 
     # Delete force arrows and paths
-    delete_objects(prefixes = ['throttle', 'gravity', 'target', 'true'])
+    delete_objects(prefixes = ['drag', 'throttle', 'gravity', 'target', 'true'])
 
     # drag forces (red arrows)
     drag = create_force_arrow('drag', color=(1, 0, 0, 1))
@@ -162,7 +162,7 @@ if __name__ == '__main__':
                 ))
 
                 force_dir = force_vec.normalized()
-                force_mag = force_vec.length / 100
+                force_mag = force_vec.length /10
 
                 default_dir = Vector((0, 0, 1)) # default parallel to z axis
                 force_quat = default_dir.rotation_difference(force_vec.normalized())
@@ -188,5 +188,5 @@ if __name__ == '__main__':
             frame += 1
 
         # plot true and target paths
-        true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0), width=0.025) # purple curve
-        target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0), width=0.025) # orange curve
+        true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0), radius=0.025) # purple curve
+        target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0), radius=0.025) # orange curve
