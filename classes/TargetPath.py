@@ -1,5 +1,4 @@
 import torch as pt
-import numpy as np
 import matplotlib.pyplot as plt
 
 # Function that interpolates between the waypoints (M,d) normalized by length

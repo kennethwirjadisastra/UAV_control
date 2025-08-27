@@ -1,7 +1,9 @@
 import torch as pt
 import numpy as np
 from matplotlib import pyplot as plt
-from classes.Vehicle import Vehicle, StateTensor
+from classes.Vehicle import Vehicle
+from classes.StateTensor import StateTensor
+from util.functions import *
 
 
 def pacejka_lateral_force(alpha):
@@ -59,11 +61,12 @@ def ackermann_steering_angles(steering_angle, wheelbase, track_width):
 
 # approximate stats from a tesla model 3
 class Car(Vehicle):
-    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None):
-        kwargs = {}
-        kwargs['state']             = state if state is not None else StateTensor()
-        kwargs['mass']              = mass if mass is not None else 1610
-        kwargs['inertia']           = inertia if inertia is not None else pt.diag(pt.tensor([550, 3200, 5600], dtype=pt.float32))
+    actions = ['Accelerate', 'Steer']
+
+    def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None, **kwargs):
+        add_arg_with_default(kwargs,    'state',    state,      StateTensor())
+        add_arg_with_default(kwargs,    'mass',     mass,       1610)
+        add_arg_with_default(kwargs,    'inertia',  inertia,    pt.diag(pt.tensor([550, 3200, 5600], dtype=pt.float32)))
         
         super().__init__(**kwargs)
 

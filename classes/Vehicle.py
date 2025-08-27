@@ -3,75 +3,18 @@ import torch as pt
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from util.quaternion import quaternion_derivative, quaternion_to_matrix
-from util.functions import dict_default
-
-class StateTensor(pt.Tensor):
-    def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None, **kwargs):
-        dict_default(kwargs, 'dtype', pt.float32)
-        dict_default(kwargs, 'device', None)
-        requires_grad = kwargs.get('requires_grad', False)
-        kwargs.pop('requires_grad', None)
-        
-        if state_vec is None:
-            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], **kwargs)
-        else:
-            state_vec = pt.as_tensor(state_vec, **kwargs)
-
-        obj = pt.Tensor._make_subclass(cls, state_vec, require_grad=requires_grad)
-        if pos is not None:
-            obj[..., 0:3] = pt.as_tensor(pos, **kwargs)
-        if vel is not None:
-            obj[..., 3:6] = pt.as_tensor(vel, **kwargs)
-        if quat is not None:
-            obj[..., 6:10] = pt.as_tensor(quat, **kwargs)
-        if angvel is not None:
-            obj[..., 10:13] = pt.as_tensor(angvel, **kwargs)
-        return obj
-
-    @property
-    def pos(self) -> pt.Tensor:
-        return self[..., 0:3]
-
-    @property
-    def vel(self) -> pt.Tensor:
-        return self[..., 3:6]
-
-    @property
-    def quat(self) -> pt.Tensor:
-        return self[..., 6:10]
-
-    @property
-    def angvel(self) -> pt.Tensor:
-        return self[..., 10:13]
-    
-    @property
-    def angvel_mat(self) -> pt.Tensor:
-        wx, wy, wz      = self[..., 10], self[..., 11], self[..., 12]
-        mat             = pt.zeros((*self.shape[:-1], 3, 3), device=self.device, dtype=self.dtype)
-        mat[..., 0, 1]  = -wz
-        mat[..., 0, 2]  =  wy
-        mat[..., 1, 0]  =  wz
-        mat[..., 1, 2]  = -wx
-        mat[..., 2, 0]  = -wy
-        mat[..., 2, 1]  =  wx
-        return mat
-    
-    @property
-    def rot_mat(self) -> pt.Tensor:
-        return quaternion_to_matrix(self[..., 6:10])
-    
-    @property
-    def batch_size(self) -> tuple:
-        return self.shape[:-1]
+from util.functions import add_default_arg
+from classes.StateTensor import StateTensor
 
 
 # vehicle class
 class Vehicle(ABC):
+    actions = []        # List of actions the vehicle can do ex: Car(Vehicle) has actions = ['Accelerate', 'Steer']
+
     def __init__(self, state: StateTensor = None, mass: float = None, inertia: pt.Tensor = None, **kwargs):
-        dict_default(kwargs,    'dtype',    pt.float32)
-        dict_default(kwargs,    'device',   None)
-        self.dtype              = kwargs['dtype']
-        self.device             = kwargs['device']
+        self.dtype              = add_default_arg(kwargs,  'dtype',    pt.float32)
+        self.device             = add_default_arg(kwargs,  'device',   None)
+        self.actions            = add_default_arg(kwargs,  'actions',  {})
 
         # state of the system
         self.state              = StateTensor(**kwargs) if state is None else state
@@ -80,6 +23,7 @@ class Vehicle(ABC):
         self.mass               = pt.tensor(1, dtype=self.dtype, device=self.device) if mass is None else pt.as_tensor(mass, dtype=self.dtype, device=self.device) 
         self.inertia            = pt.eye(3, dtype=self.dtype, device=self.device) if inertia is None else inertia.clone().detach().to(dtype=self.dtype, device=self.device)
         self.inv_inertia        = pt.linalg.inv(self.inertia)
+
 
     def _state_derivative(self, state, force, moment):
         q, w = state[..., 6:10], state[..., 10:13]

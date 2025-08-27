@@ -1,19 +1,21 @@
 import torch as pt
 import numpy as np
 import matplotlib.pyplot as plt
-from classes.Vehicle import StateTensor, Vehicle
+from classes.Vehicle import Vehicle
+from classes.StateTensor import StateTensor
 from util.quaternion import quaternion_to_matrix
+from util.functions import add_arg_with_default
 from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
 from tqdm import trange
 
 class Quadcopter(Vehicle):
-    def __init__(self, state: StateTensor=None, mass: float=None, inertia: pt.Tensor=None):
-        kwargs = {}
-        kwargs['state']             = state if state is not None else StateTensor()
-        kwargs['mass']              = mass if mass is not None else 0.5
-        kwargs['inertia']           = inertia if inertia is not None else pt.diag(pt.tensor([0.3, 0.3, 0.5], dtype=pt.float32))
+    actions = ['MotorBL, MotorBR, MotorFL, MotorFR']
 
+    def __init__(self, state: StateTensor=None, mass: float=None, inertia: pt.Tensor=None, **kwargs):
+        add_arg_with_default(kwargs,    'state',    state,      StateTensor())
+        add_arg_with_default(kwargs,    'mass',     mass,       0.5)
+        add_arg_with_default(kwargs,    'inertia',  inertia,    pt.diag(pt.tensor([0.3, 0.3, 0.5], dtype=pt.float32)))
         super().__init__(**kwargs)
 
         self.peak_motor_thrust      = 5.0   # thrust per motor in newtons
