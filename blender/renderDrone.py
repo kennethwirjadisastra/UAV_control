@@ -18,7 +18,7 @@ def create_force_arrow(name, color, radius=0.0125):
     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
     # Create cone (head)
-    '''bpy.ops.mesh.primitive_cone_add(radius1=radius*2, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
+    bpy.ops.mesh.primitive_cone_add(radius1=radius*2, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
     cone = bpy.context.active_object
     cone.name = f"{name}_head"
 
@@ -31,7 +31,7 @@ def create_force_arrow(name, color, radius=0.0125):
     cone.select_set(True)
     shaft.select_set(True)
     bpy.ops.object.join()
-    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)'''
+    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)
 
     # Set color
     mat = bpy.data.materials.get(name)
@@ -40,7 +40,7 @@ def create_force_arrow(name, color, radius=0.0125):
     mat.diffuse_color = color  # (R, G, B, Alpha)
     shaft.data.materials.append(mat)
 
-    return shaft
+    return arrow
 
 def create_path_curve(name, steps, color, radius):
     curve = bpy.data.curves.new(name=name, type='CURVE')
@@ -76,13 +76,13 @@ def delete_objects(prefixes=None, suffixes=None):
 if __name__ == '__main__':
     # Replace with your actual CSV file path
 
-    # base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/'
-    base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/'
+    # base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/trajectories/Quadcopter/'
+    base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/Quadcopter/'
 
-    csv_path        = base_path + 'trajectories/traj.csv'
-    csv_force_loc   = base_path + 'trajectories/traj_force_locs.csv'
-    csv_force_dir   = base_path + 'trajectories/traj_force_vecs.csv'
-    csv_target      = base_path + 'trajectories/drone_target.csv'
+    csv_path        = base_path + 'traj.csv'
+    csv_force_loc   = base_path + 'traj_force_locs.csv'
+    csv_force_dir   = base_path + 'traj_force_vecs.csv'
+    csv_target      = base_path + 'target.csv'
 
     drone = bpy.data.objects['Drone']
     drone.rotation_mode = 'QUATERNION'
@@ -118,17 +118,15 @@ if __name__ == '__main__':
 
     with open(csv_path, newline='') as path_file, \
         open(csv_force_loc, newline='') as force_loc_file, \
-        open(csv_force_dir, newline='') as force_dir_file, \
-        open(csv_target, newline='') as target_file:
+        open(csv_force_dir, newline='') as force_dir_file:
         
         path_reader = csv.reader(path_file)
         force_loc_reader = csv.reader(force_loc_file)
         force_dir_reader = csv.reader(force_dir_file)
-        target_reader = csv.reader(target_file)
 
         frame = 1  # start at frame 1
         
-        for path_row, force_loc_row, force_dir_row, target_row in zip(path_reader, force_loc_reader, force_dir_reader, target_reader):
+        for path_row, force_loc_row, force_dir_row in zip(path_reader, force_loc_reader, force_dir_reader):
             # Parse car's position/quaternion and force lcoation/directions from each row
             pos_x = float(path_row[0])
             pos_y = float(path_row[1])
@@ -179,13 +177,14 @@ if __name__ == '__main__':
 
             true_pos = (float(path_row[0]), float(path_row[1]), float(path_row[2]))
             true_path.append(true_pos)
-               
-            target_pos = (float(target_row[0]), float(target_row[1]), float(target_row[2]))
-            target_path.append(target_pos)
 
-
-            
             frame += 1
+
+        with open(csv_target, newline='') as target_file:
+            target_reader = csv.reader(target_file)
+            for target_row in target_reader:
+                target_pos = (float(target_row[0]), float(target_row[1]), float(target_row[2]))
+                target_path.append(target_pos)
 
         # plot true and target paths
         true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0), radius=0.025) # purple curve

@@ -12,8 +12,9 @@ def optimize_along_path(
         discount_rate: float = 0.25, acc_reg: float = 0.001,
         plot_freq: int = 5, save_folder = 'blender/trajectories/'
     ):
-
-    np.savetxt(save_folder + 'target.csv', target.waypoints, delimiter=',')
+    
+    vehicle_name = type(vehicle).__name__
+    np.savetxt(save_folder + vehicle_name + '/target.csv', target.waypoints, delimiter=',')
     fourPlot = FourViewPlot()
     fourPlot.addTrajectory(target.waypoints, 'TargetPath', color='red')
 
@@ -55,9 +56,9 @@ def optimize_along_path(
 
         # Reshape and save to CSV
 
-        np.savetxt(save_folder + 'traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
-        np.savetxt(save_folder + 'traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
+        np.savetxt(save_folder + vehicle_name + '/traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
+        np.savetxt(save_folder + vehicle_name + '/traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
 
         traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
-        np.savetxt(save_folder + 'traj.csv', traj.detach().cpu().numpy(), delimiter=',')
+        np.savetxt(save_folder + vehicle_name + '/traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     plt.show()
