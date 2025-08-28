@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from classes.Vehicle import Vehicle
 from classes.StateTensor import StateTensor
 from util.functions import *
-
+from util.blendScene import blendScene
 
 def pacejka_lateral_force(alpha):
     """
@@ -205,3 +205,5 @@ if __name__ == '__main__':
         vehicle=Car(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
         steps=100, lr=2e-3, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
+
+    blendScene('CarScene.blend', 'renderCar.py')

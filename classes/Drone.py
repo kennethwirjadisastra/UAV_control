@@ -5,6 +5,7 @@ from classes.Vehicle import Vehicle
 from classes.StateTensor import StateTensor
 from util.quaternion import quaternion_to_matrix
 from util.functions import add_arg_with_default
+from util.blendScene import blendScene
 from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
 from tqdm import trange
@@ -102,3 +103,5 @@ if __name__ == '__main__':
         vehicle=Quadcopter(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
         steps=1000, lr=2e-3, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
+
+    blendScene('Drone.blend', 'renderDrone.py')
