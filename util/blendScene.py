@@ -1,8 +1,9 @@
 import subprocess
+import sys
 from pathlib import Path
 
 
-def blendScene(scene_file: str, traj_script: str):
+def blendScene(scene_file: str, traj_script: str, traj_path: str, dt: float=None):
     # blender executable
     blender_exe = Path(r'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe')
 
@@ -17,6 +18,10 @@ def blendScene(scene_file: str, traj_script: str):
 
     # open blender file and render vehicle trajectory
     print('Opening Blender')
-    subprocess.run([blender_exe, str(blend_file), "--python", str(render_file)])
+    subprocess.run([blender_exe,
+                    str(blend_file),
+                    "--python", 
+                    str(render_file),
+                    '--', str(traj_path), str(dt)])
 
     return None

@@ -1,4 +1,6 @@
 import bpy
+import sys
+from pathlib import Path
 import csv
 from mathutils import Quaternion
 from mathutils import Vector
@@ -74,15 +76,21 @@ def delete_objects(prefixes=None, suffixes=None):
             bpy.data.objects.remove(obj, do_unlink=True)
 
 if __name__ == '__main__':
-    # Replace with your actual CSV file path
+    # set fps and trajectory csv files
+    argv = sys.argv
+    if '--' in argv:
+        args = argv[argv.index('--') + 1:]
+        base_path = Path(args[0])
+        dt = float(args[1])
 
-    # base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/trajectories/Quadcopter/'
-    base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/Quadcopter/'
+    csv_path        = base_path / 'traj.csv'
+    csv_force_loc   = base_path / 'traj_force_locs.csv'
+    csv_force_dir   = base_path / 'traj_force_vecs.csv'
+    csv_target      = base_path / 'target.csv'
 
-    csv_path        = base_path + 'traj.csv'
-    csv_force_loc   = base_path + 'traj_force_locs.csv'
-    csv_force_dir   = base_path + 'traj_force_vecs.csv'
-    csv_target      = base_path + 'target.csv'
+    fps = round(1.0/dt)
+    bpy.context.scene.render.fps = fps
+    bpy.context.scene.render.fps_base = 1.0
 
     drone = bpy.data.objects['Drone']
     drone.rotation_mode = 'QUATERNION'
@@ -92,17 +100,17 @@ if __name__ == '__main__':
     # Delete force arrows and paths
     delete_objects(prefixes = ['drag', 'throttle', 'gravity', 'target', 'true'])
 
-    # drag forces (red arrows)
-    drag = create_force_arrow('drag', color=(1, 0, 0, 1))
+    # drag forces (green arrows)
+    drag = create_force_arrow('drag', color=(0, 1, 0, 1))
 
-    # throttle forces (blue arrows)
-    throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0, 0, 1, 1))
-    throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0, 0, 1, 1))
-    throttle_front_left = create_force_arrow('throttle_front_left', color=(0, 0, 1, 1))
-    throttle_front_right = create_force_arrow('throttle_front_right', color=(0, 0, 1, 1))
+    # throttle forces (cyan arrows)
+    throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0.2, 1.0, 1.0, 1.0))
+    throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0.2, 1.0, 1.0, 1.0))
+    throttle_front_left = create_force_arrow('throttle_front_left', color=(0.2, 1.0, 1.0, 1.0))
+    throttle_front_right = create_force_arrow('throttle_front_right', color=(0.2, 1.0, 1.0, 1.0))
 
     # gravity force (black arrow)
-    gravity = create_force_arrow('gravity', color=(0, 0, 0, 1))
+    gravity = create_force_arrow('gravity', color=(1.0, 0.2, 0.8, 1.0))
 
     force_arrows = [
         drag,
@@ -186,6 +194,9 @@ if __name__ == '__main__':
                 target_pos = (float(target_row[0]), float(target_row[1]), float(target_row[2]))
                 target_path.append(target_pos)
 
+        # set end frame
+        bpy.context.scene.frame_end = frame - 1
+        
         # plot true and target paths
-        true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0), radius=0.025) # purple curve
-        target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0), radius=0.025) # orange curve
+        true_path_curve = create_path_curve('true_path', true_path, color=(0, 0, 1, 1), radius=0.025) # blue curve
+        target_path_curve = create_path_curve('target_path', target_path, color=(1, 0, 0, 1), radius=0.025) # red curve

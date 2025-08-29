@@ -5,6 +5,7 @@ from classes.Vehicle import Vehicle
 from classes.StateTensor import StateTensor
 from util.functions import *
 from util.blendScene import blendScene
+from pathlib import Path
 
 def pacejka_lateral_force(alpha):
     """
@@ -206,4 +207,8 @@ if __name__ == '__main__':
         steps=100, lr=2e-3, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 
-    blendScene('CarScene.blend', 'renderCar.py')
+    cwd = Path(__file__).resolve().parent
+    blendScene(scene_file='CarScene.blend',
+               traj_script='renderCar.py',
+               traj_path=cwd/'../blender/trajectories/Car',
+               dt=dt)
