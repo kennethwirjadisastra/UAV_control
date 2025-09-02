@@ -1,81 +1,19 @@
 import bpy
+import csv
 import sys
 from pathlib import Path
-import csv
 from mathutils import Quaternion
 from mathutils import Vector
 
-import os
-
-print(os.getcwd())
-
-def create_force_arrow(name, color):
-    # Create cylinder (shaft)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.05, depth=1, location=(0, 0, 0))
-    shaft = bpy.context.active_object
-    shaft.name = f"{name}_shaft"
-    
-    # Move origin to the base of the shaft (so scaling/rotation acts from the bottom)
-    bpy.context.scene.cursor.location = (0, 0, -0.5)  # base of unit-height cylinder
-    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
-    # Create cone (head)
-    bpy.ops.mesh.primitive_cone_add(radius1=0.1, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
-    cone = bpy.context.active_object
-    cone.name = f"{name}_head"
-
-    # Parent cone to shaft
-    cone.parent = shaft
-    cone.matrix_parent_inverse = shaft.matrix_world.inverted()
-
-    # Join into single object
-    bpy.context.view_layer.objects.active = shaft
-    cone.select_set(True)
-    shaft.select_set(True)
-    bpy.ops.object.join()
-    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)
-
-    # Set color
-    mat = bpy.data.materials.get(name)
-    if mat is None:
-        mat = bpy.data.materials.new(name)
-    mat.diffuse_color = color  # (R, G, B, Alpha)
-    arrow.data.materials.append(mat)
-
-    return arrow
-
-def create_path_curve(name, steps, color):
-    curve = bpy.data.curves.new(name=name, type='CURVE')
-    curve.dimensions = '3D'
-    curve.resolution_u = 2
-
-    polyline = curve.splines.new('POLY')
-    polyline.points.add(len(steps)-1)
-
-    for i, step in enumerate(steps):
-        polyline.points[i].co = (step[0], step[1], step[2], 1)
-
-    path = bpy.data.objects.new(name, curve)
-    bpy.context.collection.objects.link(path)
-
-    mat = bpy.data.materials.new(name+'_mat')
-    mat.diffuse_color = color  # RGBA
-    mat.use_nodes = False
-    path.data.materials.append(mat)
-
-    path.data.bevel_depth = 0.1
-    path.data.bevel_resolution = 3
-
-    return path
-
-def delete_objects(prefixes=None, suffixes=None):
-    for obj in bpy.data.objects:
-        if prefixes is not None and any(obj.name.startswith(prefix) for prefix in prefixes):
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if suffixes is not None and any(obj.name.endswith(suffix) for suffix in suffixes):
-            bpy.data.objects.remove(obj, do_unlink=True)
-
 if __name__ == '__main__':
+    # Add the project folder to Python path
+    # UAV_control/blender
+    base_dir = Path(__file__).parent
+    if str(base_dir) not in sys.path:
+        sys.path.append(str(base_dir))
+    
+    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects
+
     # set fps and trajectory csv files
     argv = sys.argv
     if '--' in argv:
@@ -100,26 +38,32 @@ if __name__ == '__main__':
     # Delete force arrows and paths
     delete_objects(prefixes = ['lat', 'susp', 'throttle', 'gravity', 'target', 'true'])
 
-    # suspension forces (bright purple arrows)
-    susp_rear_left = create_force_arrow('susp_rear_left', color=(0.8, 0.2, 1.0, 1.0))
-    susp_rear_right = create_force_arrow('susp_rear_right', color=(0.8, 0.2, 1.0, 1.0))
-    susp_front_left = create_force_arrow('susp_front_left', color=(0.8, 0.2, 1.0, 1.0))
-    susp_front_right = create_force_arrow('susp_front_right', color=(0.8, 0.2, 1.0, 1.0))
+    legend_entries = {
+        'Suspension':    (0.8, 0.2, 1.0, 1.0),  # suspension forces (bright purple arrows)
+        'Lateral':       (0, 1, 0, 1),          # lateral forces (green arrows)
+        'Throttle':      (0.2, 1.0, 1.0, 1.0),  # throttle forces (cyan arrows)
+        'Gravity':       (0, 0, 0, 1),          # gravity force (black arrow)
+        'True Path':     (0, 0, 1, 1),          # true path (blue curve)
+        'Target Path':   (1, 0, 0, 1)           # target_path (red curve)
+    }
+    create_legend(legend_entries, start_location=(2, 12, 0))
 
-    # lateral forces (green arrows)
-    lat_rear_left = create_force_arrow('lat_rear_left', color=(0, 1, 0, 1))
-    lat_rear_right = create_force_arrow('lat_rear_right', color=(0, 1, 0, 1))
-    lat_front_left = create_force_arrow('lat_front_left', color=(0, 1, 0, 1))
-    lat_front_right = create_force_arrow('lat_front_right', color=(0, 1, 0, 1))
+    susp_rear_left = create_force_arrow('susp_rear_left', color=legend_entries['Suspension'])
+    susp_rear_right = create_force_arrow('susp_rear_right', color=legend_entries['Suspension'])
+    susp_front_left = create_force_arrow('susp_front_left', color=legend_entries['Suspension'])
+    susp_front_right = create_force_arrow('susp_front_right', color=legend_entries['Suspension'])
 
-    # throttle forces (cyan arrows)
-    throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0.2, 1.0, 1.0, 1.0))
-    throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0.2, 1.0, 1.0, 1.0))
-    throttle_front_left = create_force_arrow('throttle_front_left', color=(0.2, 1.0, 1.0, 1.0))
-    throttle_front_right = create_force_arrow('throttle_front_right', color=(0.2, 1.0, 1.0, 1.0))
+    lat_rear_left = create_force_arrow('lat_rear_left', color=legend_entries['Lateral'])
+    lat_rear_right = create_force_arrow('lat_rear_right', color=legend_entries['Lateral'])
+    lat_front_left = create_force_arrow('lat_front_left', color=legend_entries['Lateral'])
+    lat_front_right = create_force_arrow('lat_front_right', color=legend_entries['Lateral'])
 
-    # gravity force (black arrow)
-    gravity = create_force_arrow('gravity', color=(0, 0, 0, 1))
+    throttle_rear_left = create_force_arrow('throttle_rear_left', color=legend_entries['Throttle'])
+    throttle_rear_right = create_force_arrow('throttle_rear_right', color=legend_entries['Throttle'])
+    throttle_front_left = create_force_arrow('throttle_front_left', color=legend_entries['Throttle'])
+    throttle_front_right = create_force_arrow('throttle_front_right', color=legend_entries['Throttle'])
+
+    gravity = create_force_arrow('gravity', color=legend_entries['Gravity'])
 
     force_arrows = [
         susp_rear_left,
@@ -167,8 +111,8 @@ if __name__ == '__main__':
             car.rotation_quaternion = quat
 
             # Insert keyframes at the current frame
-            car.keyframe_insert(data_path="location", frame=frame)
-            car.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+            car.keyframe_insert(data_path='location', frame=frame)
+            car.keyframe_insert(data_path='rotation_quaternion', frame=frame)
 
             for i, arrow in enumerate(force_arrows):
                 force_pos = Vector((
@@ -214,5 +158,8 @@ if __name__ == '__main__':
         bpy.context.scene.frame_end = frame - 1
 
         # plot true and target paths
-        true_path_curve = create_path_curve('true_path', true_path, color=(0, 0, 1, 1)) # blue curve
-        target_path_curve = create_path_curve('target_path', target_path, color=(1, 0, 0, 1)) # red curve
+        true_path_curve = create_path_curve('true_path', true_path, color=legend_entries['True Path']) 
+        target_path_curve = create_path_curve('target_path', target_path, color=legend_entries['Target Path'])
+
+        # Deselect all objects
+        bpy.ops.object.select_all(action='DESELECT')
