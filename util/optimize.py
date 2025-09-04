@@ -34,12 +34,12 @@ def optimize_along_path(
         # compute the loss
         dist_losses = ((X_p[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss
         acc_losses  = ((X_v[1:] - X_v[:-1]) ** 2).sum(dim=1) / delta_time ** 2      # per point acceleration ^ 2 loss
-        time_scale  = discount_rate ** t[...,1:]                                            # negaive exponential scaling with discount rate
+        time_scale  = discount_rate ** t[...,1:]                                    # negaive exponential scaling with discount rate
         loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
 
         # compute the backwards gradient and update the action plan
         loss.backward()
-        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0)
+        action_plan.grad = pt.nan_to_num(action_plan.grad, nan=0.0) / time_scale.unsqueeze(-1)  # normalize the loss (undo the time scale)
         optimizer.step()
 
         if step == 0 or (steps - step) % plot_freq == 1:
