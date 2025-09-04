@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from util.quaternion import quaternion_derivative, quaternion_to_matrix
 from util.functions import add_default_arg
 from classes.StateTensor import StateTensor
+# from classes.ActionPlan import ActionPlan
 
 
 # vehicle class
@@ -62,10 +63,45 @@ class Vehicle(ABC):
         # Returns the resulting net forces and net moments
         pass
 
+    # def simulate_trajectory(self, initial_state: StateTensor, action_plan: ActionPlan, dt: float):
+    #     # initial state     = (B, 13)
+    #     # AP.action         = (B, M, D)
+    #     # AP.delta_time     = (B, M)
+    #     # AP.time           = (B, M)
+
+    #     # N                 = ceil((AP.tf - AP.t0) / dt)
+
+    #     # action tensor     = (B, N, D)
+    #     # dt tensor         = (B, N)
+
+    #     action_tensor       = action_plan.rasterize()
+
+
+    #     # Simulates the system forward in time given a sequence of actions and time steps
+    #     N                   = action_plan.shape[-2]                                     # N is the number of timesteps
+    #     time                = pt.cat([dts[..., 0:1]*0, pt.cumsum(dts, dim=-1)])
+    #     states_list         = [initial_state]
+
+    #     for i in range(N):
+    #         action, dt      = action_plan[..., i, :], dts[..., i]
+    #         force, moment   = self.compute_forces_and_moments(states_list[-1], action)
+    #         states_list.append(
+    #             self.rk4_step(states_list[-1], force, moment, dt)
+    #         )
+
+    #     states_tensor = pt.stack(states_list)
+    #     # states = StateTensor(states, requires_grad=states.requires_grad)
+
+    #     # return states.pos, states.vel, states.quat, states.angvel, time
+    #     return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
+    
+
     def simulate_trajectory(self, initial_state, action_plan, dts):
         # initial state     = (B, 13)
-        # action plan       = (B, N, D)
-        # dts               = (B, N)
+        # AP.action         = (B, M, D)
+        # AP.delta_time     = (B, M)
+
+
 
         # Simulates the system forward in time given a sequence of actions and time steps
         N                   = action_plan.shape[-2]                                     # N is the number of timesteps
@@ -85,34 +121,6 @@ class Vehicle(ABC):
         # return states.pos, states.vel, states.quat, states.angvel, time
         return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
     
-
-
-    # def simulate_trajectory(self, initial_state, action_plan, dts):
-    #     device, dtype = action_plan.device, action_plan.dtype
-    #     state = tuple(s.clone() for s in initial_state)  # avoid modifying original
-    #     p_list, v_list, q_list, w_list = [state[0]], [state[1]], [state[2]], [state[3]]
-
-
-    #     for action, dt in zip(action_plan, dts):
-    #         force, moment = self.compute_forces_and_moments(state, action)
-    #         state = self.rk4_step(state, force, moment, dt)
-
-    #         p_list.append(state[0])
-    #         v_list.append(state[1])
-    #         q_list.append(state[2])
-    #         w_list.append(state[3])
-
-    #     # Stack into tensors
-    #     p = pt.stack(p_list)
-    #     v = pt.stack(v_list)
-    #     q = pt.stack(q_list)
-    #     w = pt.stack(w_list)
-    #     t = pt.cat([pt.tensor([0.0], dtype=dtype, device=device), pt.cumsum(dts, dim=0)])
-
-    #     for z in [p, v, q, t[:, None]]:
-    #         print(z.shape)
-
-    #     return p, v, q, w, t
 
 
     def __repr__(self):
