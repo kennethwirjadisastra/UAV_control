@@ -1,88 +1,34 @@
 import bpy
 import csv
+import sys
+from pathlib import Path
 from mathutils import Quaternion
 from mathutils import Vector
 
-import os
-
-print(os.getcwd())
-
-def create_force_arrow(name, color, radius=0.0125):
-    # Create cylinder (shaft)
-    bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=1, location=(0, 0, 0))
-    shaft = bpy.context.active_object
-    shaft.name = f"{name}_shaft"
-    
-    # Move origin to the base of the shaft (so scaling/rotation acts from the bottom)
-    bpy.context.scene.cursor.location = (0, 0, -0.5)  # base of unit-height cylinder
-    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
-    # Create cone (head)
-    bpy.ops.mesh.primitive_cone_add(radius1=radius*2, depth=0.2, location=(0, 0, 0.6))  # tip offset above shaft
-    cone = bpy.context.active_object
-    cone.name = f"{name}_head"
-
-    # Parent cone to shaft
-    cone.parent = shaft
-    cone.matrix_parent_inverse = shaft.matrix_world.inverted()
-
-    # Join into single object
-    bpy.context.view_layer.objects.active = shaft
-    cone.select_set(True)
-    shaft.select_set(True)
-    bpy.ops.object.join()
-    arrow = bpy.context.active_object  # shaft (cylinder) + head (cone)
-
-    # Set color
-    mat = bpy.data.materials.get(name)
-    if mat is None:
-        mat = bpy.data.materials.new(name)
-    mat.diffuse_color = color  # (R, G, B, Alpha)
-    shaft.data.materials.append(mat)
-
-    return arrow
-
-def create_path_curve(name, steps, color, radius):
-    curve = bpy.data.curves.new(name=name, type='CURVE')
-    curve.dimensions = '3D'
-    curve.resolution_u = 2
-
-    polyline = curve.splines.new('POLY')
-    polyline.points.add(len(steps)-1)
-
-    for i, step in enumerate(steps):
-        polyline.points[i].co = (step[0], step[1], step[2], 1)
-
-    path = bpy.data.objects.new(name, curve)
-    bpy.context.collection.objects.link(path)
-
-    mat = bpy.data.materials.new(name+'_mat')
-    mat.diffuse_color = color  # RGBA
-    mat.use_nodes = False
-    path.data.materials.append(mat)
-
-    path.data.bevel_depth = radius
-    path.data.bevel_resolution = 3
-
-    return path
-
-def delete_objects(prefixes=None, suffixes=None):
-    for obj in bpy.data.objects:
-        if prefixes is not None and any(obj.name.startswith(prefix) for prefix in prefixes):
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if suffixes is not None and any(obj.name.endswith(suffix) for suffix in suffixes):
-            bpy.data.objects.remove(obj, do_unlink=True)
-
 if __name__ == '__main__':
-    # Replace with your actual CSV file path
+    # Add the project folder to Python path
+    # UAV_control/blender
+    base_dir = Path(__file__).parent
+    if str(base_dir) not in sys.path:
+        sys.path.append(str(base_dir))
+    
+    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects
 
-    # base_path = 'C:/Users/niccl/OneDrive/Documents/Projects/optimal_control/UAV_control/blender/trajectories/Quadcopter/'
-    base_path = 'C:/Users/kenne/Documents/projects/UAV_control/git/blender/trajectories/Quadcopter/'
+    # set fps and trajectory csv files
+    argv = sys.argv
+    if '--' in argv:
+        args = argv[argv.index('--') + 1:]
+        base_path = Path(args[0])
+        dt = float(args[1])
 
-    csv_path        = base_path + 'traj.csv'
-    csv_force_loc   = base_path + 'traj_force_locs.csv'
-    csv_force_dir   = base_path + 'traj_force_vecs.csv'
-    csv_target      = base_path + 'target.csv'
+    csv_path        = base_path / 'traj.csv'
+    csv_force_loc   = base_path / 'traj_force_locs.csv'
+    csv_force_dir   = base_path / 'traj_force_vecs.csv'
+    csv_target      = base_path / 'target.csv'
+
+    fps = round(1.0/dt)
+    bpy.context.scene.render.fps = fps
+    bpy.context.scene.render.fps_base = 1.0
 
     drone = bpy.data.objects['Drone']
     drone.rotation_mode = 'QUATERNION'
@@ -92,17 +38,22 @@ if __name__ == '__main__':
     # Delete force arrows and paths
     delete_objects(prefixes = ['drag', 'throttle', 'gravity', 'target', 'true'])
 
-    # drag forces (red arrows)
-    drag = create_force_arrow('drag', color=(1, 0, 0, 1))
+    legend_entries = {
+        'Drag':          (0, 1, 0, 1),          # drag forces (green arrows)
+        'Throttle':      (0.2, 1.0, 1.0, 1.0),  # throttle forces (cyan arrows)
+        'Gravity':       (0, 0, 0, 1),          # gravity force (black arrow)
+        'True Path':     (0, 0, 1, 1),          # true path (blue curve)
+        'Target Path':   (1, 0, 0, 1)           # target_path (red curve)
+    }
+    create_legend(legend_entries, start_location=(2, 4, 4), marker_size=0.125, text_size=0.5)
+    drag = create_force_arrow('drag', color=legend_entries['Drag'], radius=0.0125)
 
-    # throttle forces (blue arrows)
-    throttle_rear_left = create_force_arrow('throttle_rear_left', color=(0, 0, 1, 1))
-    throttle_rear_right = create_force_arrow('throttle_rear_right', color=(0, 0, 1, 1))
-    throttle_front_left = create_force_arrow('throttle_front_left', color=(0, 0, 1, 1))
-    throttle_front_right = create_force_arrow('throttle_front_right', color=(0, 0, 1, 1))
+    throttle_rear_left = create_force_arrow('throttle_rear_left', color=legend_entries['Throttle'], radius=0.0125)
+    throttle_rear_right = create_force_arrow('throttle_rear_right', color=legend_entries['Throttle'], radius=0.0125)
+    throttle_front_left = create_force_arrow('throttle_front_left', color=legend_entries['Throttle'], radius=0.0125)
+    throttle_front_right = create_force_arrow('throttle_front_right', color=legend_entries['Throttle'], radius=0.0125)
 
-    # gravity force (black arrow)
-    gravity = create_force_arrow('gravity', color=(0, 0, 0, 1))
+    gravity = create_force_arrow('gravity', color=legend_entries['Gravity'], radius=0.0125)
 
     force_arrows = [
         drag,
@@ -186,6 +137,12 @@ if __name__ == '__main__':
                 target_pos = (float(target_row[0]), float(target_row[1]), float(target_row[2]))
                 target_path.append(target_pos)
 
+        # set end frame
+        bpy.context.scene.frame_end = frame - 1
+        
         # plot true and target paths
-        true_path_curve = create_path_curve('true_path', true_path, color=(0.4, 0.0, 0.5, 1.0), radius=0.025) # purple curve
-        target_path_curve = create_path_curve('target_path', target_path, color=(0.6, 0.3, 0.0, 1.0), radius=0.025) # orange curve
+        true_path_curve = create_path_curve('true_path', true_path, color=legend_entries['True Path'], radius=0.025) 
+        target_path_curve = create_path_curve('target_path', target_path, color=legend_entries['Target Path'], radius=0.025)
+
+        # Deselect all objects
+        bpy.ops.object.select_all(action='DESELECT')

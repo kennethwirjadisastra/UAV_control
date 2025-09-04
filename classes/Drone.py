@@ -9,6 +9,7 @@ from util.blendScene import blendScene
 from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
 from tqdm import trange
+from pathlib import Path
 
 class Quadcopter(Vehicle):
     actions = ['MotorBL, MotorBR, MotorFL, MotorFR']
@@ -104,4 +105,8 @@ if __name__ == '__main__':
         steps=1000, lr=2e-3, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 
-    blendScene('Drone.blend', 'renderDrone.py')
+    cwd = Path(__file__).resolve().parent
+    blendScene(scene_file='DroneScene.blend',
+               traj_script='renderDrone.py',
+               traj_path=cwd/'../blender/trajectories/Quadcopter',
+               dt=dt)
