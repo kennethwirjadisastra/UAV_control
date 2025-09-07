@@ -12,7 +12,7 @@ if __name__ == '__main__':
     if str(base_dir) not in sys.path:
         sys.path.append(str(base_dir))
     
-    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects
+    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects, insert_vehicle_frame, insert_force_frame
 
     # set fps and trajectory csv files
     argv = sys.argv
@@ -88,65 +88,25 @@ if __name__ == '__main__':
         open(csv_force_loc, newline='') as force_loc_file, \
         open(csv_force_dir, newline='') as force_dir_file:
         
-        path_reader = csv.reader(path_file)
+        path_reader = list(csv.reader(path_file))
         force_loc_reader = csv.reader(force_loc_file)
         force_dir_reader = csv.reader(force_dir_file)
 
         frame = 1  # start at frame 1
         
         for path_row, force_loc_row, force_dir_row in zip(path_reader, force_loc_reader, force_dir_reader):
-            # Parse car's position/quaternion and force lcoation/directions from each row
-            pos_x = float(path_row[0])
-            pos_y = float(path_row[1])
-            pos_z = float(path_row[2])
-            rot_w = float(path_row[3])
-            rot_x = float(path_row[4])
-            rot_y = float(path_row[5])
-            rot_z = float(path_row[6])
-
-        
-
-            car.location = (pos_x, pos_y, pos_z)
-            quat = Quaternion((rot_w, rot_x, rot_y, rot_z))
-            car.rotation_quaternion = quat
-
-            # Insert keyframes at the current frame
-            car.keyframe_insert(data_path='location', frame=frame)
-            car.keyframe_insert(data_path='rotation_quaternion', frame=frame)
-
-            for i, arrow in enumerate(force_arrows):
-                force_pos = Vector((
-                    float(force_loc_row[3*i]),
-                    float(force_loc_row[3*i+1]),
-                    float(force_loc_row[3*i+2])
-                ))
-
-                force_vec = Vector((
-                    float(force_dir_row[3*i]),
-                    float(force_dir_row[3*i+1]),
-                    float(force_dir_row[3*i+2]),
-                ))
-
-                force_dir = force_vec.normalized()
-                force_mag = force_vec.length / 1000
-
-                default_dir = Vector((0, 0, 1)) # default parallel to z axis
-                force_quat = default_dir.rotation_difference(force_vec.normalized())
-
-
-                arrow.location = force_pos
-                arrow.rotation_mode = 'QUATERNION'
-                arrow.rotation_quaternion = force_quat
-                arrow.scale = (1, 1, force_mag)
-
-                arrow.keyframe_insert(data_path='location', frame=frame)
-                arrow.keyframe_insert(data_path='rotation_quaternion', frame=frame)
-                arrow.keyframe_insert(data_path='scale', frame=frame)
+            insert_vehicle_frame(path_row, car, frame)
+            insert_force_frame(force_arrows, force_loc_row, force_dir_row, frame)
 
             true_pos = (float(path_row[0]), float(path_row[1]), float(path_row[2]))
             true_path.append(true_pos)
             
             frame += 1
+        
+        path_end = path_reader[-1]
+        insert_vehicle_frame(path_end, car, frame)
+        true_pos = (float(path_end[0]), float(path_end[1]), float(path_end[2]))
+        true_path.append(true_pos)
 
         with open(csv_target, newline='') as target_file:
             target_reader = csv.reader(target_file)
@@ -155,7 +115,7 @@ if __name__ == '__main__':
                 target_path.append(target_pos)
 
         # set end frame
-        bpy.context.scene.frame_end = frame - 1
+        bpy.context.scene.frame_end = frame
 
         # plot true and target paths
         true_path_curve = create_path_curve('true_path', true_path, color=legend_entries['True Path']) 

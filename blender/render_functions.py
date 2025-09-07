@@ -120,3 +120,56 @@ def delete_objects(prefixes=None, suffixes=None):
             bpy.data.objects.remove(obj, do_unlink=True)
         if suffixes is not None and any(obj.name.endswith(suffix) for suffix in suffixes):
             bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def insert_vehicle_frame(path_row, vehicle, frame):
+    pos_x = float(path_row[0])
+    pos_y = float(path_row[1])
+    pos_z = float(path_row[2])
+    rot_w = float(path_row[3])
+    rot_x = float(path_row[4])
+    rot_y = float(path_row[5])
+    rot_z = float(path_row[6])
+
+    vehicle.location = (pos_x, pos_y, pos_z)
+    quat = Quaternion((rot_w, rot_x, rot_y, rot_z))
+    vehicle.rotation_quaternion = quat
+
+    # Insert keyframes at the current frame
+    vehicle.keyframe_insert(data_path='location', frame=frame)
+    vehicle.keyframe_insert(data_path='rotation_quaternion', frame=frame)
+
+    return None
+
+
+def insert_force_frame(force_arrows, force_loc_row, force_dir_row, frame, scale=1000):
+    for i, arrow in enumerate(force_arrows):
+        force_pos = Vector((
+            float(force_loc_row[3*i]),
+            float(force_loc_row[3*i+1]),
+            float(force_loc_row[3*i+2])
+        ))
+
+        force_vec = Vector((
+            float(force_dir_row[3*i]),
+            float(force_dir_row[3*i+1]),
+            float(force_dir_row[3*i+2]),
+        ))
+
+        force_dir = force_vec.normalized()
+        force_mag = force_vec.length / scale
+
+        default_dir = Vector((0, 0, 1)) # default parallel to z axis
+        force_quat = default_dir.rotation_difference(force_vec.normalized())
+
+
+        arrow.location = force_pos
+        arrow.rotation_mode = 'QUATERNION'
+        arrow.rotation_quaternion = force_quat
+        arrow.scale = (1, 1, force_mag)
+
+        arrow.keyframe_insert(data_path='location', frame=frame)
+        arrow.keyframe_insert(data_path='rotation_quaternion', frame=frame)
+        arrow.keyframe_insert(data_path='scale', frame=frame)
+
+    return None
