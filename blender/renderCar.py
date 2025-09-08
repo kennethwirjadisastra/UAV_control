@@ -12,7 +12,7 @@ if __name__ == '__main__':
     if str(base_dir) not in sys.path:
         sys.path.append(str(base_dir))
     
-    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects, insert_vehicle_frame, insert_force_frame
+    from render_functions import create_force_arrow, create_path_curve, create_legend,delete_objects, delete_collection, insert_vehicle_frame, insert_force_frame
 
     # set fps and trajectory csv files
     argv = sys.argv
@@ -37,6 +37,7 @@ if __name__ == '__main__':
 
     # Delete force arrows and paths
     delete_objects(prefixes = ['lat', 'susp', 'throttle', 'gravity', 'target', 'true'])
+    delete_collection('Legend')
 
     legend_entries = {
         'Suspension':    (0.8, 0.2, 1.0, 1.0),  # suspension forces (bright purple arrows)

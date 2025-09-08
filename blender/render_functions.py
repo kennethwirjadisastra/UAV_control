@@ -115,11 +115,43 @@ def create_legend(entries_dict, start_location=(0, 0, 0), x_step=0.0, y_step=0.5
 
 
 def delete_objects(prefixes=None, suffixes=None):
+    '''
+    Deletes objects in scene based on prefix or suffix
+    '''
     for obj in bpy.data.objects:
         if prefixes is not None and any(obj.name.startswith(prefix) for prefix in prefixes):
             bpy.data.objects.remove(obj, do_unlink=True)
         if suffixes is not None and any(obj.name.endswith(suffix) for suffix in suffixes):
             bpy.data.objects.remove(obj, do_unlink=True)
+    return None
+
+def delete_collection(collection):
+    '''
+    Removes collection and its objects from scene
+    '''
+    coll = bpy.data.collections.get(collection)
+    if coll is None:
+        print(f"Collection '{collection}' not found")
+        return None
+    
+    # Delete all objects in the collection
+    for obj in list(coll.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    # Unlink from parent collections
+    for parent in bpy.data.collections:
+        if coll.name in parent.children.keys():
+            parent.children.unlink(coll)
+
+    # If the collection is linked to the scene directly, unlink it
+    for scene in bpy.data.scenes:
+        if coll in scene.collection.children.values():
+            scene.collection.children.unlink(coll)
+
+    # Finally, remove the collection itself
+    bpy.data.collections.remove(coll)
+    
+    return None
 
 
 def insert_vehicle_frame(path_row, vehicle, frame):
