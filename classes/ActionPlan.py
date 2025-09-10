@@ -26,7 +26,9 @@ class ActionPlan:
         self.R              = resolution                                # Number of timesteps
         self.D              = len(vehicle.__class__.actions)            # Action dimensions         cumsum([1, 2, 3]) = [1, 3, 6]
         self.delta_time     = pt.ones((self.R,), **kwargs) * min_dt     # (R)
-        self.action         = pt.zeros((self.R + 1, self.D), **kwargs)  # (R + 1, D)                1 more action than the dts for linear interpolate
+        
+        #TODO fix action initalization to zero issue with NAN grad for the car
+        self.action         = pt.ones((self.R + 1, self.D), **kwargs)*0.1   # (R + 1, D)                1 more action than the dts for linear interpolate
         self.kwargs         = kwargs
         self.min_dt         = min_dt
 
@@ -50,9 +52,8 @@ class ActionPlan:
             self.update()
 
     def update(self):
-        with pt.no_grad():
-            self.delta_time     = pt.clamp(self.delta_time, min=self.min_dt)
-        self.time           = pt.cat([pt.tensor([0]), pt.cumsum(self.delta_time, dim=-1)])        # (R + 1)
+        dt = self.min_dt * (1 + pt.exp(self.delta_time))                                        # normalizes the delta time logits
+        self.time           = pt.cat([pt.tensor([0]), pt.cumsum(dt, dim=-1)])      # (R + 1)
         
     # max_dt is the largest dt acceptable for the integrator
     # k is the number of subdivisions for each action sample
@@ -76,7 +77,10 @@ class ActionPlan:
         a_1         = self.action[idx_1.unsqueeze(-2), dims]                # action[(N, 1, k), (D, 1)] -> (N, k, D) - second action in the lerp
         action_sub  = r_1 * a_0 + (1-r_1) * a_1                             # linear interpolation of the subdivided actions
 
-        action      = action_sub.mean(dim=-1)                               # (N, D)
+        action_logits = action_sub.mean(dim=-1)                               # (N, D)
+
+        action = -1 + 2 * pt.sigmoid(action_logits)
+
         return action, pt.ones((N,)) * dt
     
     def plot(self, max_dt: float):

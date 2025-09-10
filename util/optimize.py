@@ -28,13 +28,10 @@ def optimize_along_path(
         # compute the fowards trajectory
         action_tensor, dts  = action_plan.rasterize(max_dt)
 
-        print("HERE")
-
         X_p, X_v, q, w, t   = vehicle.simulate_trajectory(vehicle.state, action_tensor, dts)
 
         # assign targets for each point along the path with no grad
         with pt.no_grad():
-            print(X_p)
             raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]), dim=-1), dim=-1)  # unscaled
             arc_dists       = (target.total_length / raw_arc_dists[-1]) * raw_arc_dists
             Y_p: pt.tensor  = target.distance_interpolate(arc_dists)
@@ -47,7 +44,12 @@ def optimize_along_path(
 
         # compute the backwards gradient and update the action plan
         loss.backward()
-        action_plan.action.grad = pt.nan_to_num(action_plan.action.grad, nan=0.0) / time_scale.unsqueeze(-1)  # normalize the loss (undo the time scale)
+
+        time_scale_prime = (discount_rate ** action_plan.time).unsqueeze(-1)
+
+        action_plan.action.grad = pt.nan_to_num(action_plan.action.grad, nan=0.0) / time_scale_prime  # normalize the loss (undo the time scale)
+
+
         optimizer.step()
         action_plan.update()
 
