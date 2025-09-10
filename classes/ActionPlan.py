@@ -26,10 +26,10 @@ class ActionPlan:
         pt.save({
             'vehicle_cls': self.vehicle_cls,
             'resolution': self.R,
-            'min_dt': plan.min_dt,
-            'kwargs': plan.kwargs,
-            'action': plan.action,
-            'delta_time': plan.delta_time,
+            'min_dt': self.min_dt,
+            'kwargs': self.kwargs,
+            'action': self.action,
+            'delta_time': self.delta_time,
         }, save_file)
         return save_file
 
@@ -108,7 +108,10 @@ class ActionPlan:
         action = (-1 + 2 * pt.sigmoid(self.action)).detach().cpu().numpy()
 
         action_r, dt_r = self.rasterize(max_dt, k=1)
-        time_r_1 = pt.cumsum(dt_r, dim=-1)
+
+        action_r = action_r.detach().cpu().numpy()
+        time_r_1 = pt.cumsum(dt_r, dim=-1).detach().cpu().numpy()
+        dt_r = dt_r.detach().cpu().numpy()
         time_r_0 = time_r_1 - dt_r
 
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
@@ -133,21 +136,24 @@ class ActionPlan:
 if __name__ == '__main__':
     from classes.Car import Car
 
-    car = Car()
+    # car = Car()
 
-    plan = ActionPlan(Car, 3, 0.01)
+    # plan = ActionPlan(Car, 3, 0.01)
 
-    plan.set(
-        action      = [[1, 2], [3, 1], [4, 5], [0, 2]],
-        delta_time  = [0.5, 1, 0.3]
-    )
+    # plan.set(
+    #     action      = [[1, 2], [3, 1], [4, 5], [0, 2]],
+    #     delta_time  = [0.5, 1, 0.3]
+    # )
 
+    # plan.print()
+    # plan.plot(0.01)
+
+    # save_file = plan.save_to_file("test_plan")
+    # print(f"saved to {save_file}")
+    # new_plan = ActionPlan.load_from_file(save_file)
+
+    # new_plan.print()
+    # new_plan.plot(0.01)
+    plan = ActionPlan.load_from_file('blender/trajectories/Car_action_plan.pt')
     plan.print()
-    plan.plot(0.01)
-
-    save_file = plan.save_to_file("test_plan")
-    print(f"saved to {save_file}")
-    new_plan = ActionPlan.load_from_file(save_file)
-
-    new_plan.print()
-    new_plan.plot(0.01)
+    plan.plot(0.05)
