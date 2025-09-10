@@ -96,20 +96,18 @@ class Vehicle(ABC):
     #     return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
     
 
-    def simulate_trajectory(self, initial_state, action_plan, dts):
+    def simulate_trajectory(self, initial_state: StateTensor, action_tensor: pt.Tensor, dts: pt.Tensor):
         # initial state     = (B, 13)
         # AP.action         = (B, M, D)
         # AP.delta_time     = (B, M)
 
-
-
         # Simulates the system forward in time given a sequence of actions and time steps
-        N                   = action_plan.shape[-2]                                     # N is the number of timesteps
+        N                   = action_tensor.shape[-2]                                     # N is the number of timesteps
         time                = pt.cat([dts[..., 0:1]*0, pt.cumsum(dts, dim=-1)])
         states_list         = [initial_state]
 
         for i in range(N):
-            action, dt      = action_plan[..., i, :], dts[..., i]
+            action, dt      = action_tensor[..., i, :], dts[..., i]
             force, moment   = self.compute_forces_and_moments(states_list[-1], action)
             states_list.append(
                 self.rk4_step(states_list[-1], force, moment, dt)
@@ -127,46 +125,3 @@ class Vehicle(ABC):
         return (f"Vehicle(position={self.position}, velocity={self.velocity}, "
                 f"quaternion={self.quaternion}, angular_velocity={self.angular_velocity})")
     
-
-
-    """simulating the trajectory using an ode solver for accuracy
-        def simulate_trajectory(self, initial_state, action_plan, dts):
-        N = len(action_plan)
-        t = pt.cat([pt.tensor([0.0]), pt.cumsum(dts, dim=0)])  # time points
-
-        # Flatten initial state to 1D tensor
-        def flatten_state(state):
-            return pt.cat([s.reshape(-1) for s in state])
-
-        def unflatten_state(x):
-            pos = x[0:3]
-            vel = x[3:6]
-            quat = x[6:10]
-            ang_vel = x[10:13]
-            return [pos, vel, quat, ang_vel]
-
-        # Action interpolation function: given time t, find corresponding action by piecewise constant
-        def get_action_at_time(current_t):
-            idx = pt.searchsorted(t, current_t, right=True) - 1
-            idx = pt.clamp(idx, 0, N-1)
-            return action_plan[idx]
-
-        def dynamics(t_now, x):
-            state = unflatten_state(x)
-            action = get_action_at_time(t_now)
-            force, moment = self.compute_forces_and_moments(state, action)
-            derivatives = self._compute_state_derivative(state, force, moment)
-            # Flatten derivatives
-            return pt.cat([d.reshape(-1) for d in derivatives])
-
-        x0 = flatten_state(initial_state)
-        traj = odeint(dynamics, x0, t, method='dopri5', rtol=1e-4, atol=1e-6)  # shape (N+1, state_dim)
-
-        # Unpack trajectory back to tensors (N+1, 3) etc.
-        p = traj[:, 0:3]
-        v = traj[:, 3:6]
-        q = traj[:, 6:10]
-        w = traj[:, 10:13]
-
-        return p, v, q, w, t
-    """

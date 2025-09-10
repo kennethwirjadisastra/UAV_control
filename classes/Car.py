@@ -175,6 +175,7 @@ class Car(Vehicle):
 from classes.TargetPath import TargetPath
 from tqdm import trange  # tqdm range iterator
 from util.optimize import optimize_along_path
+from classes.ActionPlan import ActionPlan
 
 
 
@@ -202,8 +203,11 @@ if __name__ == '__main__':
 
     waypoints = pt.stack([wx, wy, wz]).T
 
+    car = Car(init_state)
+    plan = ActionPlan(car, resolution=10)
+
     optimize_along_path(
-        vehicle=Car(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
+        vehicle=car, action_plan=plan, max_dt=0.05, target=TargetPath(waypoints), 
         steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 
