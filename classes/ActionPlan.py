@@ -10,21 +10,42 @@ from util.quaternion import quaternion_to_matrix
 import matplotlib.pyplot as plt
 import numpy as np
 
+import os
+
 # shape of the plan is (*B, N, A+1)
 # expects a time tensor of shape (*B, N, 1)
 class ActionPlan:
-    def __init__(self, vehicle: Vehicle, resolution: int = 20, min_dt: float = 0.05, **kwargs):
+    def load_from_file(folder_path: str) -> ActionPlan:
+        params = pt.load(folder_path, weights_only=False)
+        plan = ActionPlan(params['vehicle_cls'], params['resolution'], params['min_dt'], **params['kwargs'])
+        plan.set(params['action'], params['delta_time'])
+        return plan
+
+    def save_to_file(self, folder_path: str) -> str:
+        save_file = folder_path + '_action_plan.pt'
+        pt.save({
+            'vehicle_cls': self.vehicle_cls,
+            'resolution': self.R,
+            'min_dt': plan.min_dt,
+            'kwargs': plan.kwargs,
+            'action': plan.action,
+            'delta_time': plan.delta_time,
+        }, save_file)
+        return save_file
+
+
+    def __init__(self, vehicle_cls: type[Vehicle], resolution: int = 20, min_dt: float = 0.05, **kwargs):
         # Tensor kwargs
         add_default_arg(kwargs, 'dtype', pt.float32)
         add_default_arg(kwargs, 'device', None)
         # requires_grad = kwargs.get('requires_grad', False)
         kwargs.pop('requires_grad', None)
 
-        self.vehicle        = vehicle
+        self.vehicle_cls    = vehicle_cls
 
         # Plan variables
         self.R              = resolution                                # Number of timesteps
-        self.D              = len(vehicle.__class__.actions)            # Action dimensions         cumsum([1, 2, 3]) = [1, 3, 6]
+        self.D              = len(vehicle_cls.actions)            # Action dimensions         cumsum([1, 2, 3]) = [1, 3, 6]
         self.delta_time     = pt.ones((self.R,), **kwargs) * min_dt     # (R)
         
         #TODO fix action initalization to zero issue with NAN grad for the car
@@ -58,7 +79,7 @@ class ActionPlan:
     # max_dt is the largest dt acceptable for the integrator
     # k is the number of subdivisions for each action sample
     # returns the average action at each timestep and the dts
-    def rasterize(self, max_dt: float, k: int = 4) -> tuple[pt.Tensor, pt.Tensor]:
+    def rasterize(self, max_dt: float, k: int = 1) -> tuple[pt.Tensor, pt.Tensor]:
         N           = pt.ceil(self.time[-1] / max_dt).to(pt.int64)          # (1)
         dt          = self.time[-1] / N                                     # (1)
         ts          = pt.arange(N, **self.kwargs) * dt                      # (N) * (1) -> (N)
@@ -70,22 +91,21 @@ class ActionPlan:
             idx_1   = pt.clamp(idx_0 + 1, 0, self.R)
             dims    = pt.arange(self.D).unsqueeze(-1)                       # (D, 1)
 
+        action      = -1 + 2 * pt.sigmoid(self.action)      # normalize the action
+        delta_time  = self.min_dt * (1 + pt.exp(self.delta_time))
 
-        r_1         = ((self.time[idx_1] - ts_sub) / self.delta_time[idx_0]).unsqueeze(-2)
+        r_1         = ((self.time[idx_1] - ts_sub) / delta_time[idx_0]).unsqueeze(-2)
                                                                             # r_1 = 1 - r, proportion across the current action, Should be bounded by [0,]
-        a_0         = self.action[idx_0.unsqueeze(-2), dims]                # action[(N, 1, k), (D, 1)] -> (N, k, D) - first action in the lerp
-        a_1         = self.action[idx_1.unsqueeze(-2), dims]                # action[(N, 1, k), (D, 1)] -> (N, k, D) - second action in the lerp
+        a_0         = action[idx_0.unsqueeze(-2), dims]                     # action[(N, 1, k), (D, 1)] -> (N, k, D) - first action in the lerp
+        a_1         = action[idx_1.unsqueeze(-2), dims]                     # action[(N, 1, k), (D, 1)] -> (N, k, D) - second action in the lerp
+
         action_sub  = r_1 * a_0 + (1-r_1) * a_1                             # linear interpolation of the subdivided actions
-
-        action_logits = action_sub.mean(dim=-1)                               # (N, D)
-
-        action = -1 + 2 * pt.sigmoid(action_logits)
-
+        action = action_sub.mean(dim=-1)                                    # (N, D)
         return action, pt.ones((N,)) * dt
     
     def plot(self, max_dt: float):
         time = self.time.detach().cpu().numpy()
-        action = self.action.detach().cpu().numpy()
+        action = (-1 + 2 * pt.sigmoid(self.action)).detach().cpu().numpy()
 
         action_r, dt_r = self.rasterize(max_dt, k=1)
         time_r_1 = pt.cumsum(dt_r, dim=-1)
@@ -95,10 +115,11 @@ class ActionPlan:
             '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', 
             '#bcbd22', '#17becf']
         
+        print('Actions = ', self.vehicle_cls.actions)
 
         for i in range(self.D):
-            plt.plot(time, action[:, i], '--', label=self.vehicle.__class__.actions[i], color = colors[i])
-            label = [f'Rasterized {self.vehicle.__class__.actions[i]}'] + [None for _ in range(time_r_0.shape[0]-1)]
+            plt.plot(time, action[:, i], '--', label=self.vehicle_cls.actions[i], color = colors[i])
+            label = [f'Rasterized {self.vehicle_cls.actions[i]}'] + [None for _ in range(time_r_0.shape[0]-1)]
             plt.plot([time_r_0, time_r_1], [action_r[:, i], action_r[:, i]], label=label, color = colors[i])
 
         plt.legend()
@@ -114,7 +135,7 @@ if __name__ == '__main__':
 
     car = Car()
 
-    plan = ActionPlan(car, 3, 0.01)
+    plan = ActionPlan(Car, 3, 0.01)
 
     plan.set(
         action      = [[1, 2], [3, 1], [4, 5], [0, 2]],
@@ -122,6 +143,11 @@ if __name__ == '__main__':
     )
 
     plan.print()
-    plan.plot(0.05)
+    plan.plot(0.01)
 
+    save_file = plan.save_to_file("test_plan")
+    print(f"saved to {save_file}")
+    new_plan = ActionPlan.load_from_file(save_file)
 
+    new_plan.print()
+    new_plan.plot(0.01)

@@ -204,7 +204,7 @@ if __name__ == '__main__':
     waypoints = pt.stack([wx, wy, wz]).T
 
     car = Car(init_state)
-    plan = ActionPlan(car, resolution=10)
+    plan = ActionPlan(Car, resolution=10)
 
     optimize_along_path(
         vehicle=car, action_plan=plan, max_dt=0.05, target=TargetPath(waypoints), 

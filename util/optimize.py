@@ -74,6 +74,8 @@ def optimize_along_path(
         np.savetxt(save_folder + vehicle_name + '/traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
         np.savetxt(save_folder + vehicle_name + '/traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
 
+        action_plan.save_to_file(save_folder + vehicle_name + '_acton_plan/')
+
         traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
         np.savetxt(save_folder + vehicle_name + '/traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     plt.show()
