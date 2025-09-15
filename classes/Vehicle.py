@@ -33,7 +33,8 @@ class Vehicle(ABC):
             state[..., 3:6], 
             force / self.mass, 
             quaternion_derivative(q, w),
-            (moment - pt.cross(w, w @ self.inertia, dim=-1)) @ self.inv_inertia
+            #(moment - pt.cross(w, w @ self.inertia, dim=-1)) @ self.inv_inertia
+            self.inv_inertia @ (moment - pt.cross(w, self.inv_inertia @ w, dim=-1))
         ], dim=-1)
 
     def rk4_step(self, state, force, moment, dt):

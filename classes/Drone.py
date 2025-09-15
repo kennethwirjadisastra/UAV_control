@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from classes.Vehicle import Vehicle
 from classes.StateTensor import StateTensor
+from classes.ActionPlan import ActionPlan
 from util.quaternion import quaternion_to_matrix
 from util.functions import add_arg_with_default
 from util.blendScene import blendScene
@@ -12,7 +13,7 @@ from tqdm import trange
 from pathlib import Path
 
 class Quadcopter(Vehicle):
-    actions = ['MotorBL, MotorBR, MotorFL, MotorFR']
+    actions = ['MotorBL', 'MotorBR', 'MotorFL', 'MotorFR']
 
     def __init__(self, state: StateTensor=None, mass: float=None, inertia: pt.Tensor=None, **kwargs):
         add_arg_with_default(kwargs,    'state',    state,      StateTensor())
@@ -100,8 +101,16 @@ if __name__ == '__main__':
     waypoints = pt.stack([wx, wy, wz]).T
     np.savetxt('blender/trajectories/drone_target.csv', waypoints, delimiter=',')
 
+    drone = Quadcopter(init_state)
+    plan = ActionPlan(Quadcopter, resolution=10)
+
+    #optimize_along_path(
+    #    vehicle=Quadcopter(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
+    #    steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
+    #)
+
     optimize_along_path(
-        vehicle=Quadcopter(init_state), action_plan=action_plan, delta_time=dts, target=TargetPath(waypoints), 
+        vehicle=drone, action_plan=plan, max_dt=0.05, target=TargetPath(waypoints), 
         steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 

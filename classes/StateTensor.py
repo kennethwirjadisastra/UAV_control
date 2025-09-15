@@ -4,6 +4,9 @@ from util.quaternion import quaternion_to_matrix
 
 class StateTensor(pt.Tensor):
     def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None, **kwargs):
+        # Position and velocity are world relative
+        # Angular velocity is body relative
+
         add_default_arg(kwargs, 'dtype', pt.float32)
         add_default_arg(kwargs, 'device', None)
         requires_grad = kwargs.get('requires_grad', False)
