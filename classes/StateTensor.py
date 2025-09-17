@@ -3,6 +3,15 @@ from util.functions import add_default_arg
 from util.quaternion import quaternion_to_matrix
 
 class StateTensor(pt.Tensor):
+    @classmethod
+    def from_tensor(cls, tensor: pt.Tensor) -> "StateTensor":
+        if not isinstance(tensor, pt.Tensor):
+            raise TypeError("Input must be a torch.Tensor")
+        if tensor.shape[-1] != 13:
+            raise ValueError("StateTensor requires last dimension = 13")
+        return pt.Tensor._make_subclass(cls, tensor, require_grad=tensor.requires_grad)
+    
+    
     def __new__(cls, state_vec=None, pos=None, vel=None, quat=None, angvel=None, **kwargs):
         # Position and velocity are world relative
         # Angular velocity is body relative
