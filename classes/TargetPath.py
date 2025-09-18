@@ -16,7 +16,6 @@ class TargetPath:
         lengths = pt.linalg.norm(segments, axis=-1)
         self.total_length = pt.sum(lengths)
         norm_lenghts = lengths / self.total_length
-        print(norm_lenghts.shape)
         self.normalized_cumulative_lengths = pt.concatenate([pt.zeros(1), pt.cumsum(norm_lenghts, dim=0)])
         self.scaled_segment_vectors = (segments / lengths[:,None]) * self.total_length
 
