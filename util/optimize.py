@@ -5,7 +5,7 @@ from tqdm import trange
 from classes.Vehicle import Vehicle, StateTensor
 from classes.TargetPath import TargetPath
 from classes.ActionPlan import ActionPlan
-from visualization.FourViewPlot import FourViewPlot
+from visualization.MultiViewPlot import SixViewPlot
 
 def optimize_along_path(
         vehicle: Vehicle, action_plan: ActionPlan, max_dt: float, target: TargetPath, 
@@ -17,8 +17,8 @@ def optimize_along_path(
     # Plotting and saving
     vehicle_name = type(vehicle).__name__
     np.savetxt(save_folder + vehicle_name + '/target.csv', target.waypoints, delimiter=',')
-    fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
+    multiPlot = SixViewPlot()
+    multiPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
 
     # Optimizer
     optimizer = pt.optim.Adam([action_plan.action, action_plan.delta_time], lr=lr)
@@ -56,11 +56,13 @@ def optimize_along_path(
         action_plan.print()
 
 
+        multiPlot.addLoss(loss.detach().cpu().numpy(), step)
         if step == 0 or (steps - step) % plot_freq == 1:
-            fourPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
-            fourPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
-            fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
-            fourPlot.show()
+            multiPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
+            multiPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
+            multiPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
+            multiPlot.addAction(action_plan, action_plan.min_dt)
+            multiPlot.show()
 
     # save the trajectory
     with pt.no_grad():
