@@ -9,6 +9,10 @@ class StateTensor(pt.Tensor):
             raise TypeError("Input must be a torch.Tensor")
         if tensor.shape[-1] != 13:
             raise ValueError("StateTensor requires last dimension = 13")
+        
+        tensor.__class__ = StateTensor
+        return tensor
+
         return pt.Tensor._make_subclass(cls, tensor, require_grad=tensor.requires_grad)
     
     

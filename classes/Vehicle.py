@@ -97,7 +97,7 @@ class Vehicle(ABC):
     #     return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
     
 
-    def simulate_trajectory(self, initial_state: StateTensor, action_tensor: pt.Tensor, dts: pt.Tensor):
+    def simulate_trajectory(self, initial_state: StateTensor, action_tensor: pt.Tensor, dts: pt.Tensor) -> tuple[StateTensor, pt.Tensor]:
         # initial state     = (B, 13)
         # AP.action         = (B, M, D)
         # AP.delta_time     = (B, M)
@@ -114,11 +114,13 @@ class Vehicle(ABC):
                 self.rk4_step(states_list[-1], force, moment, dt)
             )
 
-        states_tensor = pt.stack(states_list)
+        states_tensor = StateTensor.from_tensor(pt.stack(states_list))
         # states = StateTensor(states, requires_grad=states.requires_grad)
 
         # return states.pos, states.vel, states.quat, states.angvel, time
-        return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
+        # return states_tensor[...,0:3], states_tensor[...,3:6], states_tensor[...,6:10], states_tensor[...,10:13], time
+        return states_tensor, time
+    
     
 
 
