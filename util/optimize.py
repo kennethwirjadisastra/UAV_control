@@ -22,6 +22,7 @@ def optimize_along_path(
 
     # Optimizer
     optimizer = pt.optim.Adam([action_plan.action, action_plan.delta_time], lr=lr)
+    action_tensor = None
     for step in trange(steps, desc='Optimizing action plan', unit='iter'):
         optimizer.zero_grad()
 
@@ -64,18 +65,15 @@ def optimize_along_path(
 
     # save the trajectory
     with pt.no_grad():
-        state = StateTensor(state_vec=pt.cat([X.pos[:-1], X.vel[:-1], q[:-1], w[:-1]], dim=-1))
-        action_tensor, _                = action_plan.rasterize(max_dt)
-        force_vecs, force_locs, _       = vehicle.compute_forces(state, action_tensor)
+        force_vecs, force_locs, _       = vehicle.compute_forces(X[:-1], action_tensor)
         force_locs += X.pos[:-1,:,None]
 
         # Reshape and save to CSV
-
         np.savetxt(save_folder + vehicle_name + '/traj_force_vecs.csv', force_vecs.mT.cpu().numpy().reshape(force_vecs.shape[0], -1), delimiter=',')
         np.savetxt(save_folder + vehicle_name + '/traj_force_locs.csv', force_locs.mT.cpu().numpy().reshape(force_locs.shape[0], -1), delimiter=',')
 
         action_plan.save_to_file(save_folder + vehicle_name)
 
-        traj = pt.concatenate([X.pos, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+        traj = pt.concatenate([X.pos, X.quat], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
         np.savetxt(save_folder + vehicle_name + '/traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     plt.show()
