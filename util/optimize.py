@@ -28,17 +28,17 @@ def optimize_along_path(
         # compute the fowards trajectory
         action_tensor, dts  = action_plan.rasterize(max_dt)
 
-        X_p, X_v, q, w, t   = vehicle.simulate_trajectory(vehicle.state, action_tensor, dts)
+        X, t   = vehicle.simulate_trajectory(vehicle.state, action_tensor, dts)
 
         # assign targets for each point along the path with no grad
         with pt.no_grad():
-            raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]), dim=-1), dim=-1)  # unscaled
+            raw_arc_dists   = pt.cumsum(pt.norm((X.pos[1:] - X.pos[:-1]), dim=-1), dim=-1)  # unscaled
             arc_dists       = (target.total_length / raw_arc_dists[-1]) * raw_arc_dists
             Y_p: pt.tensor  = target.distance_interpolate(arc_dists).pos
 
         # compute the loss
-        dist_losses = ((X_p[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss
-        acc_losses  = ((X_v[1:] - X_v[:-1]) ** 2).sum(dim=1) / dts ** 2             # per point acceleration ^ 2 loss
+        dist_losses = ((X.pos[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss
+        acc_losses  = ((X.vel[1:] - X.vel[:-1]) ** 2).sum(dim=1) / dts ** 2             # per point acceleration ^ 2 loss
         time_scale  = discount_rate ** t[...,1:]                                    # negaive exponential scaling with discount rate
         loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
 
@@ -57,17 +57,17 @@ def optimize_along_path(
 
 
         if step == 0 or (steps - step) % plot_freq == 1:
-            fourPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
-            fourPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
+            fourPlot.addTrajectory(X.pos.detach().cpu().numpy(), 'Vehicle', color='blue')
+            fourPlot.addScatter(X.pos.detach().cpu().numpy(), 'X_p', color='cyan')
             fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
             fourPlot.show()
 
     # save the trajectory
     with pt.no_grad():
-        state = StateTensor(state_vec=pt.cat([X_p[:-1], X_v[:-1], q[:-1], w[:-1]], dim=-1))
+        state = StateTensor(state_vec=pt.cat([X.pos[:-1], X.vel[:-1], q[:-1], w[:-1]], dim=-1))
         action_tensor, _                = action_plan.rasterize(max_dt)
         force_vecs, force_locs, _       = vehicle.compute_forces(state, action_tensor)
-        force_locs += X_p[:-1,:,None]
+        force_locs += X.pos[:-1,:,None]
 
         # Reshape and save to CSV
 
@@ -76,6 +76,6 @@ def optimize_along_path(
 
         action_plan.save_to_file(save_folder + vehicle_name)
 
-        traj = pt.concatenate([X_p, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
+        traj = pt.concatenate([X.pos, q], axis=1) # shape (N, 7): [x, y, z, qw, qx, qy, qz]
         np.savetxt(save_folder + vehicle_name + '/traj.csv', traj.detach().cpu().numpy(), delimiter=',')
     plt.show()
