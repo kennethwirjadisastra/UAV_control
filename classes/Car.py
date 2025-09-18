@@ -201,7 +201,7 @@ if __name__ == '__main__':
     wy = 10*(1-pt.cos(ts * 0.8))
     wz = ts*0
 
-    waypoints = pt.stack([wx, wy, wz]).T
+    waypoints = StateTensor(pos=pt.stack([wx, wy, wz]).T)
 
     car = Car(init_state)
     plan = ActionPlan(Car, resolution=10)

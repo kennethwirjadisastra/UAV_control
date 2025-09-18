@@ -18,7 +18,7 @@ def optimize_along_path(
     vehicle_name = type(vehicle).__name__
     np.savetxt(save_folder + vehicle_name + '/target.csv', target.waypoints, delimiter=',')
     fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(target.waypoints, 'TargetPath', color='red')
+    fourPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
 
     # Optimizer
     optimizer = pt.optim.Adam([action_plan.action, action_plan.delta_time], lr=lr)
@@ -34,7 +34,7 @@ def optimize_along_path(
         with pt.no_grad():
             raw_arc_dists   = pt.cumsum(pt.norm((X_p[1:] - X_p[:-1]), dim=-1), dim=-1)  # unscaled
             arc_dists       = (target.total_length / raw_arc_dists[-1]) * raw_arc_dists
-            Y_p: pt.tensor  = target.distance_interpolate(arc_dists)
+            Y_p: pt.tensor  = target.distance_interpolate(arc_dists).pos
 
         # compute the loss
         dist_losses = ((X_p[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss

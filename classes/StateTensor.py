@@ -22,7 +22,13 @@ class StateTensor(pt.Tensor):
         kwargs.pop('requires_grad', None)
         
         if state_vec is None:
-            state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], **kwargs)
+            arg_not_none = [_ for _ in (pos, vel, quat, angvel) if _ is not None]
+            if len(arg_not_none) == 0:
+                state_vec = pt.tensor([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], **kwargs)
+            else:
+                batch = pt.as_tensor(arg_not_none[0]).shape[:-1]
+                state_vec = pt.zeros((*batch, 13), **kwargs)
+                state_vec[..., 6] = 1
         else:
             state_vec = pt.as_tensor(state_vec, **kwargs)
 
