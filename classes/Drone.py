@@ -7,7 +7,6 @@ from classes.ActionPlan import ActionPlan
 from util.quaternion import quaternion_to_matrix
 from util.functions import add_arg_with_default
 from util.blendScene import blendScene
-from visualization.MultiViewPlot import SixViewPlot
 from classes.TargetPath import TargetPath
 from tqdm import trange
 from pathlib import Path

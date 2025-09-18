@@ -3,7 +3,7 @@ from classes.ActionPlan import ActionPlan
 
 # plt.ion()
 
-class SixViewPlot:
+class MultiViewPlot:
     def __init__(self):
         self.fig = plt.figure(figsize=(24, 30))
 

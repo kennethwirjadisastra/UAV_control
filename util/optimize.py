@@ -5,7 +5,7 @@ from tqdm import trange
 from classes.Vehicle import Vehicle, StateTensor
 from classes.TargetPath import TargetPath
 from classes.ActionPlan import ActionPlan
-from visualization.MultiViewPlot import SixViewPlot
+from visualization.MultiViewPlot import MultiViewPlot
 
 def optimize_along_path(
         vehicle: Vehicle, action_plan: ActionPlan, max_dt: float, target: TargetPath, 
@@ -17,7 +17,7 @@ def optimize_along_path(
     # Plotting and saving
     vehicle_name = type(vehicle).__name__
     np.savetxt(save_folder + vehicle_name + '/target.csv', target.waypoints, delimiter=',')
-    multiPlot = SixViewPlot()
+    multiPlot = MultiViewPlot()
     multiPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
 
     # Optimizer
@@ -59,8 +59,8 @@ def optimize_along_path(
 
         multiPlot.addLoss(loss.detach().cpu().numpy(), step)
         if step == 0 or (steps - step) % plot_freq == 1:
-            multiPlot.addTrajectory(X_p.detach().cpu().numpy(), 'Vehicle', color='blue')
-            multiPlot.addScatter(X_p.detach().cpu().numpy(), 'X_p', color='cyan')
+            multiPlot.addTrajectory(X.detach().cpu().numpy(), 'Vehicle', color='blue')
+            multiPlot.addScatter(X.detach().cpu().numpy(), 'X_p', color='cyan')
             multiPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
             multiPlot.addAction(action_plan, action_plan.min_dt)
             multiPlot.show()
