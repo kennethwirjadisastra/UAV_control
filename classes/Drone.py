@@ -12,7 +12,7 @@ from tqdm import trange
 from pathlib import Path
 
 class Quadcopter(Vehicle):
-    actions = ['MotorBL, MotorBR, MotorFL, MotorFR']
+    actions = ['MotorBL', 'MotorBR', 'MotorFL', 'MotorFR']
 
     def __init__(self, state: StateTensor=None, mass: float=None, inertia: pt.Tensor=None, **kwargs):
         add_arg_with_default(kwargs,    'state',    state,      StateTensor())
