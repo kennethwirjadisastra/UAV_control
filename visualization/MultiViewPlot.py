@@ -5,7 +5,7 @@ from classes.ActionPlan import ActionPlan
 
 class MultiViewPlot:
     def __init__(self):
-        self.fig = plt.figure(figsize=(24, 30))
+        self.fig = plt.figure(figsize=(30, 30))
 
         self.plotYZ     = self.fig.add_subplot(2, 3, 1)
         self.plotXY     = self.fig.add_subplot(2, 3, 2)
@@ -88,7 +88,7 @@ class MultiViewPlot:
         self.plotXZ.grid(True)
         self.plotXZ.axis('equal')
 
-        self.plotLoss.set_title('Loss')
+        self.plotLoss.set_title('Mean Distance Loss')
         self.plotLoss.set_xlabel('Iteration')
         self.plotLoss.set_ylabel('Loss')
         self.plotLoss.grid(True)
