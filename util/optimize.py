@@ -38,9 +38,9 @@ def optimize_along_path(
             Y_p: pt.tensor  = target.distance_interpolate(arc_dists).pos
 
         # compute the loss
-        dist_losses = ((X.pos[1:] - Y_p[:]) ** 2).sum(dim=1)                          # per point L_2^2 loss
+        dist_losses = ((X.pos[1:] - Y_p[:]) ** 2).sum(dim=1)                            # per point L_2^2 loss
         acc_losses  = ((X.vel[1:] - X.vel[:-1]) ** 2).sum(dim=1) / dts ** 2             # per point acceleration ^ 2 loss
-        time_scale  = discount_rate ** t[...,1:]                                    # negaive exponential scaling with discount rate
+        time_scale  = discount_rate ** t[...,1:]                                        # negaive exponential scaling with discount rate
         loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
 
         # compute the backwards gradient and update the action plan
