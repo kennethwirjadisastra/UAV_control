@@ -7,7 +7,6 @@ from classes.ActionPlan import ActionPlan
 from util.quaternion import quaternion_to_matrix
 from util.functions import add_arg_with_default
 from util.blendScene import blendScene
-from visualization.FourViewPlot import FourViewPlot
 from classes.TargetPath import TargetPath
 from tqdm import trange
 from pathlib import Path
@@ -98,7 +97,7 @@ if __name__ == '__main__':
     wy = 10*(1-pt.cos(ts/2))
     wz = 5.0*pt.ones_like(ts)
 
-    waypoints = pt.stack([wx, wy, wz]).T
+    waypoints = StateTensor(pos=pt.stack([wx, wy, wz]).T)
     np.savetxt('blender/trajectories/drone_target.csv', waypoints, delimiter=',')
 
     drone = Quadcopter(init_state)

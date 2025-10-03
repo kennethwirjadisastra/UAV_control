@@ -1,15 +1,18 @@
 import matplotlib.pyplot as plt
+from classes.ActionPlan import ActionPlan
 
 # plt.ion()
 
-class FourViewPlot:
+class MultiViewPlot:
     def __init__(self):
-        self.fig = plt.figure(figsize=(12, 12))
+        self.fig = plt.figure(figsize=(30, 30))
 
-        self.plotYZ = self.fig.add_subplot(2, 2, 1)
-        self.plot3D = self.fig.add_subplot(2, 2, 2, projection='3d')
-        self.plotXY = self.fig.add_subplot(2, 2, 3)
-        self.plotXZ = self.fig.add_subplot(2, 2, 4)
+        self.plotYZ     = self.fig.add_subplot(2, 3, 1)
+        self.plotXY     = self.fig.add_subplot(2, 3, 2)
+        self.plotLoss   = self.fig.add_subplot(2, 3, 3)
+        self.plotXZ     = self.fig.add_subplot(2, 3, 4)
+        self.plot3D     = self.fig.add_subplot(2, 3, 5, projection='3d')
+        self.plotAction = self.fig.add_subplot(2, 3, 6)
 
         self.curves = {}
         self.scatters = {}
@@ -48,6 +51,13 @@ class FourViewPlot:
             S3D._offsets3d = (pos[:,0], pos[:,1], pos[:,2])
             SXY.set_offsets(pos[:, [0, 1]])
             SXZ.set_offsets(pos[:, [0, 2]])
+
+    def addLoss(self, loss, iter, color='r', marker='.', s=100):
+        self.plotLoss.scatter(iter, loss, color=color, marker=marker, s=s)
+
+    def addAction(self, AP: ActionPlan, max_dt: float):
+        self.plotAction.clear()
+        AP.plot(max_dt=max_dt, ax=self.plotAction)
         
 
     def show(self):
@@ -55,28 +65,39 @@ class FourViewPlot:
         self.plotYZ.set_title('Y-Z')
         self.plotYZ.set_xlabel('Y')
         self.plotYZ.set_ylabel('Z')
-        self.plotYZ.grid()
+        self.plotYZ.grid(True)
         self.plotYZ.axis('equal')
 
         self.plot3D.set_title('Vehicle Trajectory')
         self.plot3D.set_xlabel('X Position')
         self.plot3D.set_ylabel('Y Position')
         self.plot3D.set_zlabel('Z Position')
-        self.plot3D.grid()
+        self.plot3D.grid(True)
         self.plot3D.axis('equal')
         self.plot3D.legend()
 
         self.plotXY.set_title('X-Y')
         self.plotXY.set_xlabel('X')
         self.plotXY.set_ylabel('Y')
-        self.plotXY.grid()
+        self.plotXY.grid(True)
         self.plotXY.axis('equal')
 
         self.plotXZ.set_title('X-Z')
         self.plotXZ.set_xlabel('X')
         self.plotXZ.set_ylabel('Z')
-        self.plotXZ.grid()
+        self.plotXZ.grid(True)
         self.plotXZ.axis('equal')
+
+        self.plotLoss.set_title('Mean Distance Loss')
+        self.plotLoss.set_xlabel('Iteration')
+        self.plotLoss.set_ylabel('Loss')
+        self.plotLoss.grid(True)
+        self.plotLoss.set_yscale('log')
+
+        self.plotAction.set_title('Loss')
+        self.plotAction.set_xlabel('Time')
+        self.plotAction.set_ylabel('Action')
+        self.plotAction.grid(True)
 
         self.fig.subplots_adjust(
             left=0.06,

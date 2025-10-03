@@ -5,7 +5,7 @@ from tqdm import trange
 from classes.Vehicle import Vehicle, StateTensor
 from classes.TargetPath import TargetPath
 from classes.ActionPlan import ActionPlan
-from visualization.FourViewPlot import FourViewPlot
+from visualization.MultiViewPlot import MultiViewPlot
 
 def optimize_along_path(
         vehicle: Vehicle, action_plan: ActionPlan, max_dt: float, target: TargetPath, 
@@ -17,8 +17,8 @@ def optimize_along_path(
     # Plotting and saving
     vehicle_name = type(vehicle).__name__
     np.savetxt(save_folder + vehicle_name + '/target.csv', target.waypoints, delimiter=',')
-    fourPlot = FourViewPlot()
-    fourPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
+    multiPlot = MultiViewPlot()
+    multiPlot.addTrajectory(target.waypoints.pos, 'TargetPath', color='red')
 
     # Optimizer
     optimizer = pt.optim.Adam([action_plan.action, action_plan.delta_time], lr=lr)
@@ -38,9 +38,9 @@ def optimize_along_path(
             Y_p: pt.tensor  = target.distance_interpolate(arc_dists).pos
 
         # compute the loss
-        dist_losses = ((X.pos[1:] - Y_p[:]) ** 2).sum(dim=1)                            # per point L_2^2 loss
-        acc_losses  = ((X.vel[1:] - X.vel[:-1]) ** 2).sum(dim=1) / dts ** 2             # per point acceleration ^ 2 loss
-        time_scale  = discount_rate ** t[...,1:]                                        # negaive exponential scaling with discount rate
+        dist_losses = ((X.pos[1:] - Y_p[:]) ** 2).sum(dim=1)                        # per point L_2^2 loss
+        acc_losses  = ((X.vel[1:] - X.vel[:-1]) ** 2).sum(dim=1) / dts ** 2         # per point acceleration ^ 2 loss
+        time_scale  = discount_rate ** t[...,1:]                                    # negaive exponential scaling with discount rate
         loss = ((dist_losses + acc_reg * acc_losses) * time_scale).sum(dim=0)
 
         # compute the backwards gradient and update the action plan
@@ -54,14 +54,16 @@ def optimize_along_path(
         optimizer.step()
         action_plan.update()
 
-        action_plan.print()
+        # action_plan.print()
 
 
+        multiPlot.addLoss(dist_losses.mean().detach().cpu().numpy(), step)
         if step == 0 or (steps - step) % plot_freq == 1:
-            fourPlot.addTrajectory(X.pos.detach().cpu().numpy(), 'Vehicle', color='blue')
-            fourPlot.addScatter(X.pos.detach().cpu().numpy(), 'X_p', color='cyan')
-            fourPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
-            fourPlot.show()
+            multiPlot.addTrajectory(X.pos.detach().cpu().numpy(), 'Vehicle', color='blue')
+            multiPlot.addScatter(X.pos.detach().cpu().numpy(), 'X_p', color='cyan')
+            multiPlot.addScatter(Y_p.detach().cpu().numpy(), 'Y_p', color='orange')
+            multiPlot.addAction(action_plan, action_plan.min_dt)
+            multiPlot.show()
 
     # save the trajectory
     with pt.no_grad():

@@ -5,3 +5,5 @@ __pycache__/
 *.py[cod]
 
 *.blend1
+
+figures/*

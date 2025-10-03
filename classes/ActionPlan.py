@@ -103,7 +103,7 @@ class ActionPlan:
         action = action_sub.mean(dim=-1)                                    # (N, D)
         return action, pt.ones((N,)) * dt
     
-    def plot(self, max_dt: float):
+    def plot(self, max_dt: float, ax=None):
         time = self.time.detach().cpu().numpy()
         action = (-1 + 2 * pt.sigmoid(self.action)).detach().cpu().numpy()
 
@@ -119,14 +119,20 @@ class ActionPlan:
             '#bcbd22', '#17becf']
         
         print('Actions = ', self.vehicle_cls.actions)
+        
+        if ax is None:
+            fig, ax = plt.subplots()
+
 
         for i in range(self.D):
-            plt.plot(time, action[:, i], '--', label=self.vehicle_cls.actions[i], color = colors[i])
+            ax.plot(time, action[:, i], '--', label=self.vehicle_cls.actions[i], color = colors[i])
             label = [f'Rasterized {self.vehicle_cls.actions[i]}'] + [None for _ in range(time_r_0.shape[0]-1)]
-            plt.plot([time_r_0, time_r_1], [action_r[:, i], action_r[:, i]], label=label, color = colors[i])
+            ax.plot([time_r_0, time_r_1], [action_r[:, i], action_r[:, i]], label=label, color = colors[i])
 
-        plt.legend()
-        plt.show()
+        ax.legend()
+        ax.grid()
+        # plt.show()
+        return ax
 
 ###################################
 ## ---------- testing ---------- ##
@@ -157,3 +163,4 @@ if __name__ == '__main__':
     plan = ActionPlan.load_from_file('blender/trajectories/Car_action_plan.pt')
     plan.print()
     plan.plot(0.05)
+    plt.show()
