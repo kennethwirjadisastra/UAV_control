@@ -92,9 +92,10 @@ class MultiViewPlot:
         self.plotLoss.set_xlabel('Iteration')
         self.plotLoss.set_ylabel('Loss')
         self.plotLoss.grid(True)
+        self.plotLoss.set_xscale('log')
         self.plotLoss.set_yscale('log')
 
-        self.plotAction.set_title('Loss')
+        self.plotAction.set_title('Control Inputs')
         self.plotAction.set_xlabel('Time')
         self.plotAction.set_ylabel('Action')
         self.plotAction.grid(True)
