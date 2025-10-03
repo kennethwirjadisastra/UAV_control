@@ -5,7 +5,16 @@ from classes.ActionPlan import ActionPlan
 
 class MultiViewPlot:
     def __init__(self):
-        self.fig = plt.figure(figsize=(30, 30))
+        plt.rcParams.update({
+            'font.size': 14,          # default
+            'axes.titlesize': 22,     # title
+            'axes.labelsize': 18,     # x and y labels
+            'xtick.labelsize': 12,    # x tick labels
+            'ytick.labelsize': 12,    # y tick labels
+            'legend.fontsize': 12,    # legend
+        })
+
+        self.fig = plt.figure(figsize=(24, 16), dpi=70)
 
         self.plotYZ     = self.fig.add_subplot(2, 3, 1)
         self.plotXY     = self.fig.add_subplot(2, 3, 2)
@@ -92,7 +101,7 @@ class MultiViewPlot:
         self.plotLoss.set_xlabel('Iteration')
         self.plotLoss.set_ylabel('Loss')
         self.plotLoss.grid(True)
-        self.plotLoss.set_xscale('log')
+        self.plotLoss.set_xscale('linear')
         self.plotLoss.set_yscale('log')
 
         self.plotAction.set_title('Control Inputs')
@@ -101,13 +110,16 @@ class MultiViewPlot:
         self.plotAction.grid(True)
 
         self.fig.subplots_adjust(
-            left=0.06,
-            bottom=0.04,
-            right=0.96,
-            top=0.97,
-            wspace=0.14,
-            hspace=0.138
+            left=0.03,
+            bottom=0.038,
+            right=0.995,
+            top=0.976,
+            wspace=0.171,
+            hspace=0.14
         )
+
+
+
 
 
         self.fig.canvas.draw()       # draw initial plot
