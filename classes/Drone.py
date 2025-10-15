@@ -66,7 +66,7 @@ class Quadcopter(Vehicle):
 ## ---------- testing ---------- ##
 ###################################
 
-from util.optimize import optimize_along_path
+from util.optimize import optimize_along_path, optimize_start_end
 
 if __name__ == '__main__':
     # initial state
@@ -108,8 +108,8 @@ if __name__ == '__main__':
     #    steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     #)
 
-    optimize_along_path(
-        vehicle=drone, action_plan=plan, max_dt=0.05, target=TargetPath(waypoints), 
+    optimize_start_end(
+        vehicle=drone, action_plan=plan, max_dt=0.05, target=StateTensor(pos=[2,3,4]), 
         steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 
