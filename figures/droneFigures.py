@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
     optimize_along_path(
         vehicle=drone, action_plan=plan, max_dt=0.05, target=TargetPath(waypoints), 
-        steps=300, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
+        steps=500, lr=5e-2, discount_rate=0.25, acc_reg=1e-3, plot_freq=10
     )
 
     cwd = Path(__file__).resolve().parent
